@@ -11,7 +11,7 @@
  * published by the Free Software Foundation; either version 2 of
  * the License, or (at your option) any later version.
  */
-
+#define HPSC_NEW_GIC
 / {
 	compatible = "xlnx,zynqmp";
 	#address-cells = <2>;
@@ -423,6 +423,20 @@
 		#size-cells = <1>;
 		ranges = <0 0 0 0 0xffffffff>;
 
+#ifdef HPSC_NEW_GIC
+		gic: interrupt-controller@f9000000 {
+			compatible = "arm,gic-v3"; 
+/*			compatible = "arm,gic-400", "arm,cortex-a15-gic";
+			compatible = "arm,gic-500"; */ /* DK: with this, kernel cannot find interrupt contoller */
+			#interrupt-cells = <3>;
+			#redistributor-regions = <1>;
+			reg = <0x0 0xf9000000 0x20000>,
+			      <0x0 0xf9100000 0x100000>;
+			interrupt-controller;
+/*			interrupt-parent = <&gic>; */ /* DK: no change */
+			interrupts = <1 9 0xf04>;
+		};
+#else
 		gic: interrupt-controller@f9010000 {
 			compatible = "arm,gic-400", "arm,cortex-a15-gic";
 			#interrupt-cells = <3>;
@@ -434,6 +448,7 @@
 			interrupt-parent = <&gic>;
 			interrupts = <1 9 0xf04>;
 		};
+#endif
 	};
 
 	amba: amba {
