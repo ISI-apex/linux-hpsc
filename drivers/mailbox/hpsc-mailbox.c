@@ -90,24 +90,6 @@ static irqreturn_t bcm2835_mbox_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-#if 0
-static irqreturn_t bcm2835_mbox_irq_rcver(int irq, void *dev_id)
-{
-	struct bcm2835_mbox *mbox = dev_id;
-	struct device *dev = mbox->controller.dev;
-	struct mbox_chan *link = &mbox->controller.chans[0];
-	dev_dbg(dev, "Receiver received IRQ: msg 0x%08X\n", 0);
-#if 1
-	while (!(readl(mbox->regs + MAIL1_STA) & ARM_MS_EMPTY)) {
-		u32 msg = readl(mbox->regs + MAIL1_RD);
-		dev_dbg(dev, "Receiver received IRQ: msg 0x%08X\n", msg);
-		//mbox_chan_received_data(link, &msg);
-	}
-#endif
-	return IRQ_HANDLED;
-}
-#endif
-
 static int bcm2835_send_data(struct mbox_chan *link, void *data)
 {
 	struct bcm2835_mbox *mbox = bcm2835_link_mbox(link);
@@ -190,19 +172,6 @@ static int bcm2835_mbox_probe(struct platform_device *pdev)
 			ret);
 		return -ENODEV;
 	}
-
-#if 0
-	/* TODO: this is dummy for testing, it should be on the receiving end */
-	irqnum = irq_of_parse_and_map(dev->of_node, 1);
-	dev_info(dev, "bcm2835_mbox_probe: rcver irq %u\n", irqnum);
-	ret = devm_request_irq(dev, irqnum,
-			       bcm2835_mbox_irq_rcver, 0, dev_name(dev), mbox);
-	if (ret) {
-		dev_err(dev, "Failed to register a mailbox IRQ handler for receiver: %d\n",
-			ret);
-		return -ENODEV;
-	}
-#endif
 
 	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	mbox->regs = devm_ioremap_resource(&pdev->dev, iomem);
