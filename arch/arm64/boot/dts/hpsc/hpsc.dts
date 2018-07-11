@@ -1,0 +1,432 @@
+/dts-v1/;
+
+#include <dt-bindings/phy/phy.h>
+
+/ {
+	model = "HPSC";
+	compatible = "xlnx,zynqmp";
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	aliases {
+		ethernet0 = &xgmac;
+		serial0 = &uart0;
+	};
+
+	chosen {
+		bootargs = "earlycon";
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory {
+		device_type = "memory";
+		/* NOTE: when changing this, remember to also change in Qemu DT and U-Boot DT */
+		reg =	<0x00 0x80000000 0x00 0x40000000>; /* DDR Low 2G */
+		     /* <0x01 0x00000000 0x00 0x80000000>; */ /* DDR High 2G */
+	             /* <0x02 0x00000000 0x01 0x00000000>; */ /* DDR High 4G */
+	             /* <0x08 0x00000000 0x08 0x00000000>; */ /* DDR High 32G */
+	             /* <0x10 0x00000000 0x10 0x00000000>; */ /* DDR High 64G */
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu-map {
+			cluster0 {
+				core0 {
+					cpu = <&cpub0>;
+				};
+				core1 {
+					cpu = <&cpub1>;
+				};
+				core2 {
+					cpu = <&cpub2>;
+				};
+				core3 {
+					cpu = <&cpub3>;
+				};
+			};
+
+			cluster1 {
+				core0 {
+					cpu = <&cpul0>;
+				};
+				core1 {
+					cpu = <&cpul1>;
+				};
+				core2 {
+					cpu = <&cpul2>;
+				};
+				core3 {
+					cpu = <&cpul3>;
+				};
+			};
+		};
+         
+		cpul0: cpu@0 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			enable-method = "psci";
+			reg = <0x0>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+		};
+
+		cpul1: cpu@1 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			enable-method = "psci";
+			reg = <0x1>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+		};
+
+		cpul2: cpu@2 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			enable-method = "psci";
+			reg = <0x2>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+		};
+
+		cpul3: cpu@3 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			enable-method = "psci";
+			reg = <0x3>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+		};
+
+		cpub0: cpu@100 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			enable-method = "psci";
+			reg = <0x100>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+		};
+
+		cpub1: cpu@101 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			enable-method = "psci";
+			reg = <0x101>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+		};
+
+		cpub2: cpu@102 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			enable-method = "psci";
+			reg = <0x102>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+		};
+
+		cpub3: cpu@103 {
+			compatible = "arm,cortex-a53", "arm,armv8";
+			device_type = "cpu";
+			enable-method = "psci";
+			reg = <0x103>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
+		};
+
+		idle-states {
+			entry-mehod = "arm,psci";
+
+			CPU_SLEEP_0: cpu-sleep-0 {
+				compatible = "arm,idle-state";
+				arm,psci-suspend-param = <0x40000000>;
+				local-timer-stop;
+				entry-latency-us = <300>;
+				exit-latency-us = <600>;
+				min-residency-us = <800000>;
+			};
+		};
+	};
+
+	dcc: dcc {
+		compatible = "arm,dcc";
+		status = "okay";
+	};
+
+	power-domains {
+		compatible = "xlnx,zynqmp-genpd";
+
+		pd_uart0: pd-uart0 {
+			#power-domain-cells = <0x0>;
+			pd-id = <0x21>;
+		};
+
+		pd_xgmac: pd-xgmac {
+			#power-domain-cells = <0x0>;
+			pd-id = <0x1d>;
+		};
+
+		pd_nand: pd-nand {
+			#power-domain-cells = <0x0>;
+			pd-id = <0x2c>;
+		};
+
+		pd_pcie: pd-pcie {
+			#power-domain-cells = <0x0>;
+			pd-id = <0x3b>;
+		};
+	};
+
+	pmu {
+		compatible = "arm,armv8-pmuv3";
+		interrupt-parent = <&gic>;
+		interrupts = <0 143 4>,
+			     <0 144 4>,
+			     <0 145 4>,
+			     <0 146 4>,
+			     <0 147 4>,
+			     <0 148 4>,
+			     <0 149 4>,
+			     <0 150 4>;
+		interrupt-affinity = <&cpul0>, <&cpul1>, <&cpul2>,
+				     <&cpul3>, <&cpub0>, <&cpub1>,
+				     <&cpub2>, <&cpub3>;
+	};
+
+	psci {
+		compatible = "arm,psci-0.2";
+		method = "smc";
+	};
+
+	firmware {
+		compatible = "xlnx,zynqmp-pm";
+		method = "smc";
+		interrupt-parent = <&gic>;
+		interrupts = <0 35 4>;
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupt-parent = <&gic>;
+		interrupts = <1 13 0xf01>,
+			     <1 14 0xf01>,
+			     <1 11 0xf01>,
+			     <1 10 0xf01>;
+	};
+
+	edac {
+		compatible = "arm,cortex-a53-edac";
+	};
+
+	pcap {
+		compatible = "xlnx,zynqmp-pcap-fpga";
+	};
+
+	amba_apu: amba_apu {
+		compatible = "simple-bus";
+		#address-cells = <2>;
+		#size-cells = <1>;
+		ranges = <0 0 0 0 0xffffffff>;
+
+		gic: interrupt-controller@f9000000 {
+			compatible = "arm,gic-v3"; 
+			#interrupt-cells = <3>;
+			#redistributor-regions = <1>;
+			reg = <0x0 0xf9000000 0x20000>,
+			      <0x0 0xf9100000 0x100000>;
+			interrupt-controller;
+			interrupts = <1 9 0xf04>;
+		};
+	};
+
+	amba: amba {
+		compatible = "simple-bus";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		xgmac: ethernet@0xe5300000 {
+			compatible = "cdns,zynqmp-gem";
+			status = "okay";
+			interrupt-parent = <&gic>;
+			interrupts = <0 57 4>, <0 57 4>;
+			reg = <0x0 0xe5300000 0x0 0x1000>;
+			clocks = <&clk125>, <&clk125>, <&clk125>;
+			clock-names = "pclk", "hclk", "tx_clk";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			#stream-id-cells = <1>;
+#if 0 /* TODO: smmu */
+			iommus = <&smmu 0x874>;
+#endif
+			power-domains = <&pd_xgmac>;
+			local-mac-address = [00 0a 35 00 02 90];
+			phy-handle = <&phy0>;
+			phy-mode = "rgmii-id";
+			phy0: phy@21 {
+				reg = <21>;
+				ti,rx-internal-delay = <0x8>;
+				ti,tx-internal-delay = <0xa>;
+				ti,fifo-depth = <0x1>;
+			};
+		};
+
+		pcie: pcie@0xe5330000 {
+			compatible = "xlnx,nwl-pcie-2.11";
+			status = "okay";
+			#address-cells = <3>;
+			#size-cells = <2>;
+			#interrupt-cells = <1>;
+			msi-controller;
+			device_type = "pci";
+			interrupt-parent = <&gic>;
+			interrupts = <0 118 4>,
+				     <0 117 4>,
+				     <0 116 4>,
+				     <0 115 4>,	/* MSI_1 [63...32] */
+				     <0 114 4>;	/* MSI_0 [31...0] */
+			interrupt-names = "misc","dummy","intx", "msi1", "msi0";
+			msi-parent = <&pcie>;
+			reg = <0x0 0xe5330000 0x0 0x1000>,
+			      <0x0 0xe53d0000 0x0 0x1000>,
+			      <0x80 0x00000000 0x0 0x1000000>;
+			reg-names = "breg", "pcireg", "cfg";
+			ranges = <0x02000000 0x00000000 0xe0000000 0x00000000 0xe0000000 0x00000000 0x10000000	/* non-prefetchable memory */
+				  0x43000000 0x00000006 0x00000000 0x00000006 0x00000000 0x00000002 0x00000000>;/* prefetchable memory */
+			interrupt-map-mask = <0x0 0x0 0x0 0x7>;
+			interrupt-map = <0x0 0x0 0x0 0x1 &pcie_intc 0x1>,
+					<0x0 0x0 0x0 0x2 &pcie_intc 0x2>,
+					<0x0 0x0 0x0 0x3 &pcie_intc 0x3>,
+					<0x0 0x0 0x0 0x4 &pcie_intc 0x4>;
+			power-domains = <&pd_pcie>;
+			pcie_intc: legacy-interrupt-controller {
+				interrupt-controller;
+				#address-cells = <0>;
+				#interrupt-cells = <1>;
+			};
+		};
+
+#if 0 /* TODO: this is MMU near nic7 */
+		smmu: smmu@fd800000 {
+			compatible = "arm,mmu-500";
+			reg = <0x0 0xfd800000 0x0 0x20000>;
+			#iommu-cells = <1>;
+			#global-interrupts = <1>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 155 4>,
+				<0 155 4>, <0 155 4>, <0 155 4>, <0 155 4>,
+				<0 155 4>, <0 155 4>, <0 155 4>, <0 155 4>,
+				<0 155 4>, <0 155 4>, <0 155 4>, <0 155 4>,
+				<0 155 4>, <0 155 4>, <0 155 4>, <0 155 4>;
+			mmu-masters = < &gem0 0x874
+					&gem1 0x875
+					&gem2 0x876
+					&gem3 0x877
+					&usb0 0x860
+					&usb1 0x861
+					&qspi 0x873
+					&lpd_dma_chan1 0x868
+					&lpd_dma_chan2 0x869
+					&lpd_dma_chan3 0x86a
+					&lpd_dma_chan4 0x86b
+					&lpd_dma_chan5 0x86c
+					&lpd_dma_chan6 0x86d
+					&lpd_dma_chan7 0x86e
+					&lpd_dma_chan8 0x86f
+					&fpd_dma_chan1 0x14e8
+					&fpd_dma_chan2 0x14e9
+					&fpd_dma_chan3 0x14ea
+					&fpd_dma_chan4 0x14eb
+					&fpd_dma_chan5 0x14ec
+					&fpd_dma_chan6 0x14ed
+					&fpd_dma_chan7 0x14ee
+					&fpd_dma_chan8 0x14ef
+					&sdhci0 0x870
+					&sdhci1 0x871
+					&nand0 0x872>;
+		};
+#endif
+
+		uart0: serial@f92c0000 {
+			compatible = "cdns,uart-r1p12", "xlnx,xuartps";
+			status = "okay";
+			interrupt-parent = <&gic>;
+			interrupts = <0 21 4>;
+			reg = <0x0 0xf92c0000 0x0 0x1000>;
+			clocks = <&clk100 &clk100>;
+			clock-names = "uart_clk", "pclk";
+			power-domains = <&pd_uart0>;
+		};
+
+		hpps_trch_mailbox: mailbox@0xf9220000 {
+			compatible = "hpsc,hpsc-mbox";
+			reg = <0x0 0xf9220000 0x0 0x40>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 163 4>, <0 164 4>;
+			#mbox-cells = <0>;
+		};
+
+		hpps_trch_mailbox_test {
+			compatible = "mailbox-test";
+			mboxes = <&hpps_trch_mailbox>;
+			mbox-names = "tx";
+		};
+
+		hpps_rtps_mailbox: mailbox@0xf9230000 {
+			compatible = "hpsc,hpsc-mbox";
+			reg = <0x0 0xf9230000 0x0 0x40>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 165 4>, <0 166 4>;
+			#mbox-cells = <0>;
+		};
+
+/* only one test at a time is supported
+		hpps_rtps_mailbox_test {
+			compatible = "mailbox-test";
+			mboxes = <&hpps_rtps_mailbox>;
+			mbox-names = "tx";
+		};
+*/
+
+		hpps_dma: dma-controller@0xf92e0000 {
+			#dma-cells = <1>;
+			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
+			reg = <0x0 0xf92e0000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 171 4>, <0 172 4>;
+			clocks = <&dma_clk>;
+			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
+		};
+
+		srio_dma_0: dma-controller@0xe5310000 {
+			#dma-cells = <1>;
+			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
+			reg = <0x0 0xe5310000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 173 4>, <0 174 4>;
+			clocks = <&dma_clk>;
+			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
+		};
+
+		srio_dma_1: dma-controller@0xe5320000 {
+			#dma-cells = <1>;
+			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
+			reg = <0x0 0xe5320000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 175 4>, <0 176 4>;
+			clocks = <&dma_clk>;
+			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
+		};
+	};
+
+	clk100: clk100 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <100000000>;
+	};
+	clk125: clk125 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <125000000>;
+	};
+
+	dma_clk: dma_clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0x0>;
+		clock-frequency = <533000000>;
+	};
+};
