@@ -356,9 +356,13 @@ static int mbox_test_probe(struct platform_device *pdev)
 	resource_size_t size;
 	int ret;
 
+	dev_info(&pdev->dev, "mailbox test: probe\n");
+
 	tdev = devm_kzalloc(&pdev->dev, sizeof(*tdev), GFP_KERNEL);
-	if (!tdev)
+	if (!tdev) {
+		dev_err(&pdev->dev, "mailbox test: no mem\n");
 		return -ENOMEM;
+	}
 
 	/* It's okay for MMIO to be NULL */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -382,8 +386,10 @@ static int mbox_test_probe(struct platform_device *pdev)
 	tdev->tx_channel = mbox_test_request_channel(pdev, "tx");
 	tdev->rx_channel = mbox_test_request_channel(pdev, "rx");
 
-	if (!tdev->tx_channel && !tdev->rx_channel)
+	if (!tdev->tx_channel && !tdev->rx_channel) {
+		dev_err(&pdev->dev, "mailbox test: both rx and tx chan null\n");
 		return -EPROBE_DEFER;
+	}
 
 	/* If Rx is not specified but has Rx MMIO, then Rx = Tx */
 	if (!tdev->rx_channel && (tdev->rx_mmio != tdev->tx_mmio))
@@ -397,8 +403,10 @@ static int mbox_test_probe(struct platform_device *pdev)
 	if (tdev->rx_channel) {
 		tdev->rx_buffer = devm_kzalloc(&pdev->dev,
 					       MBOX_MAX_MSG_LEN, GFP_KERNEL);
-		if (!tdev->rx_buffer)
+		if (!tdev->rx_buffer) {
+			dev_err(&pdev->dev, "mailbox test: rx buf null\n");
 			return -ENOMEM;
+		}
 	}
 
 	ret = mbox_test_add_debugfs(pdev, tdev);
