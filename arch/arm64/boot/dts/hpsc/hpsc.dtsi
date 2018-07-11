@@ -995,6 +995,20 @@
 			power-domains = <&pd_uart1>;
 		};
 
+		mailbox: mailbox@0xf9240000 {
+			compatible = "hpsc,hpsc-mbox";
+			reg = <0x0 0xf9240000 0x0 0x40>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 161 4>, <0 162 4>;
+			#mbox-cells = <0>;
+		};
+
+		mailbox_test {
+			compatible = "mailbox-test";
+			mboxes = <&mailbox>;
+			mbox-names = "tx";
+		};
+
 		usb0: usb@fe200000 {
 			#address-cells = <2>;
 			#size-cells = <2>;
