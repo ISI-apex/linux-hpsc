@@ -96,6 +96,13 @@ config BCM2835_MBOX
 	  the services of the Videocore. Say Y here if you want to use the
 	  BCM2835 Mailbox.
 
+config HPSC_MBOX
+	tristate "HPSC Mailbox"
+	help
+	  An implementation of a mailbox that serves as a placeholder for
+	  the mailbox on the HPSC chiplet, until the mailbox IP is decided.
+	  This placeholder implementation is based on the BCM2835 Mailbox.
+
 config STI_MBOX
 	tristate "STI Mailbox framework support"
 	depends on ARCH_STI && OF
