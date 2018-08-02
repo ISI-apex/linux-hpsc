@@ -74,6 +74,12 @@
 		clock-frequency = <262750000>;
 		clock-accuracy = <0x64>;
 	};
+
+	dma_clk: dma_clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0x0>;
+		clock-frequency = <533000000>;
+	};
 };
 
 &can0 {
@@ -238,4 +244,9 @@
 
 &xlnx_dp_snd_codec0 {
 	clocks = <&dp_aud_clk>;
+};
+
+&hpps_dma {
+	clocks = <&dma_clk>;
+	clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 };

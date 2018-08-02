@@ -1009,6 +1009,14 @@
 			mbox-names = "tx";
 		};
 
+		hpps_dma: dma-controller@0xe2320000 {
+			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
+			reg = <0x0 0xe2320000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 163 4>, <0 164 4>;
+			#dma-cells = <1>;
+		};
+
 		usb0: usb@fe200000 {
 			#address-cells = <2>;
 			#size-cells = <2>;
