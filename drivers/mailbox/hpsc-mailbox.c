@@ -109,10 +109,6 @@ static int bcm2835_startup(struct mbox_chan *link)
 	/* Enable the interrupt on data reception */
 	writel(ARM_MC_IHAVEDATAIRQEN, mbox->regs + MAIL0_CNF);
 
-	/* TODO: the receiver end (TRCH) should enable this,
-   		 but do it here for now */
-	writel(ARM_MC_IHAVEDATAIRQEN, mbox->regs + MAIL1_CNF);
-
 	return 0;
 }
 
