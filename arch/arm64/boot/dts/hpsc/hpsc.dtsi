@@ -1043,11 +1043,43 @@
 */
 
 
-		hpps_dma: dma-controller@0x3000b000 {
+		trch_dma: dma-controller@0x3000b000 {
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0x3000b000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 			interrupts = <0 167 4>, <0 168 4>;
+			#dma-cells = <1>;
+		};
+
+		rtps_dma: dma-controller@0x38440000 {
+			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
+			reg = <0x0 0x38440000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 169 4>, <0 170 4>;
+			#dma-cells = <1>;
+		};
+
+		hpps_dma: dma-controller@0xf92e0000 {
+			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
+			reg = <0x0 0xf92e0000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 171 4>, <0 172 4>;
+			#dma-cells = <1>;
+		};
+
+		srio_dma_0: dma-controller@0xe5310000 {
+			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
+			reg = <0x0 0xe5310000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 173 4>, <0 174 4>;
+			#dma-cells = <1>;
+		};
+
+		srio_dma_1: dma-controller@0xe5320000 {
+			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
+			reg = <0x0 0xe5320000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 175 4>, <0 176 4>;
 			#dma-cells = <1>;
 		};
 

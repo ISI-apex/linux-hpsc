@@ -246,6 +246,27 @@
 	clocks = <&dp_aud_clk>;
 };
 
+&trch_dma {
+	clocks = <&dma_clk>;
+	clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
+};
+
+
+&rtps_dma {
+	clocks = <&dma_clk>;
+	clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
+};
+
+&srio_dma_0 {
+	clocks = <&dma_clk>;
+	clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
+};
+
+&srio_dma_1 {
+	clocks = <&dma_clk>;
+	clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
+};
+
 &hpps_dma {
 	clocks = <&dma_clk>;
 	clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
