@@ -995,25 +995,59 @@
 			power-domains = <&pd_uart1>;
 		};
 
-		mailbox: mailbox@0xf9240000 {
+		rtps_trch_mailbox: mailbox@0x3000a000 {
 			compatible = "hpsc,hpsc-mbox";
-			reg = <0x0 0xf9240000 0x0 0x40>;
+			reg = <0x0 0x3000B000 0x0 0x40>;
 			interrupt-parent = <&gic>;
 			interrupts = <0 161 4>, <0 162 4>;
 			#mbox-cells = <0>;
 		};
 
-		mailbox_test {
+/* only one test at a time is supported
+		rtps_trch_mailbox_test {
 			compatible = "mailbox-test";
-			mboxes = <&mailbox>;
+			mboxes = <&hpps_trch_mailbox>;
+			mbox-names = "tx";
+		};
+*/
+
+
+		hpps_trch_mailbox: mailbox@0xf9220000 {
+			compatible = "hpsc,hpsc-mbox";
+			reg = <0x0 0xf9220000 0x0 0x40>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 163 4>, <0 164 4>;
+			#mbox-cells = <0>;
+		};
+
+		hpps_trch_mailbox_test {
+			compatible = "mailbox-test";
+			mboxes = <&hpps_trch_mailbox>;
 			mbox-names = "tx";
 		};
 
-		hpps_dma: dma-controller@0xe2320000 {
-			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
-			reg = <0x0 0xe2320000 0x0 0x1000>;
+		hpps_rtps_mailbox: mailbox@0xf9230000 {
+			compatible = "hpsc,hpsc-mbox";
+			reg = <0x0 0xf9230000 0x0 0x40>;
 			interrupt-parent = <&gic>;
-			interrupts = <0 163 4>, <0 164 4>;
+			interrupts = <0 165 4>, <0 166 4>;
+			#mbox-cells = <0>;
+		};
+
+/* only one test at a time is supported
+		hpps_rtps_mailbox_test {
+			compatible = "mailbox-test";
+			mboxes = <&hpps_rtps_mailbox>;
+			mbox-names = "tx";
+		};
+*/
+
+
+		hpps_dma: dma-controller@0x3000b000 {
+			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
+			reg = <0x0 0x3000b000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+			interrupts = <0 167 4>, <0 168 4>;
 			#dma-cells = <1>;
 		};
 
