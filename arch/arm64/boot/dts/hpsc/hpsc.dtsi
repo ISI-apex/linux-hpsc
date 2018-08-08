@@ -997,7 +997,7 @@
 
 		rtps_trch_mailbox: mailbox@0x3000a000 {
 			compatible = "hpsc,hpsc-mbox";
-			reg = <0x0 0x3000B000 0x0 0x40>;
+			reg = <0x0 0x3000a000 0x0 0x40>;
 			interrupt-parent = <&gic>;
 			interrupts = <0 161 4>, <0 162 4>;
 			#mbox-cells = <0>;
