@@ -345,7 +345,7 @@
 			compatible = "cdns,uart-r1p12", "xlnx,xuartps";
 			status = "okay";
 			interrupt-parent = <&gic>;
-			interrupts = <0 21 4>;
+			interrupts = <0 23 4>;
 			reg = <0x0 0xf92c0000 0x0 0x1000>;
 			clocks = <&clk100 &clk100>;
 			clock-names = "uart_clk", "pclk";
