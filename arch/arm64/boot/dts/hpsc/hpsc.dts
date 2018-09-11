@@ -35,6 +35,20 @@
 		cpu-map {
 			cluster0 {
 				core0 {
+					cpu = <&cpul0>;
+				};
+				core1 {
+					cpu = <&cpul1>;
+				};
+				core2 {
+					cpu = <&cpul2>;
+				};
+				core3 {
+					cpu = <&cpul3>;
+				};
+			};
+			cluster1 {
+				core0 {
 					cpu = <&cpub0>;
 				};
 				core1 {
@@ -48,20 +62,6 @@
 				};
 			};
 
-			cluster1 {
-				core0 {
-					cpu = <&cpul0>;
-				};
-				core1 {
-					cpu = <&cpul1>;
-				};
-				core2 {
-					cpu = <&cpul2>;
-				};
-				core3 {
-					cpu = <&cpul3>;
-				};
-			};
 		};
          
 		cpul0: cpu@0 {
