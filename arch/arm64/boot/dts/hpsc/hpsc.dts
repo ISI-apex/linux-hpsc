@@ -18,15 +18,7 @@
 		stdout-path = "serial0:115200n8";
 	};
 
-	memory {
-		device_type = "memory";
-		/* NOTE: when changing this, remember to also change in Qemu DT and U-Boot DT */
-		reg =	<0x00 0x80000000 0x00 0x40000000>; /* DDR Low 2G */
-		     /* <0x01 0x00000000 0x00 0x80000000>; */ /* DDR High 2G */
-	             /* <0x02 0x00000000 0x01 0x00000000>; */ /* DDR High 4G */
-	             /* <0x08 0x00000000 0x08 0x00000000>; */ /* DDR High 32G */
-	             /* <0x10 0x00000000 0x10 0x00000000>; */ /* DDR High 64G */
-	};
+        /* NOTE: memory { } nodes appended by u-boot from its device tree */
 
 	cpus {
 		#address-cells = <1>;
