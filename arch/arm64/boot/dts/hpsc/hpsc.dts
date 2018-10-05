@@ -20,6 +20,11 @@
 
         /* NOTE: memory { } nodes appended by u-boot from its device tree */
 
+        reserved-memory { /* TOOD: confirm that this is respected, also can/should this be in u-boot DT? */
+                /* for RTPS<->HPPS MMU page table and space for MMU test data */
+                reg = <0x0 0x8e000000 0x0 0x2000>;
+        };
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
