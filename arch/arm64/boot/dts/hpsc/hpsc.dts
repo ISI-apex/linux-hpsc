@@ -372,7 +372,7 @@
 			#mbox-cells = <2>; /* instance index, direction (is incoming) */
 		};
 
-		hpps_trch_mailbox_test {
+		mailbox_client {
 			compatible = "mailbox-client-userspace";
 			mboxes =  /* ip block, intance index, dir (1=incoming) */
                                   <&hpps_mailbox  0  0>,
