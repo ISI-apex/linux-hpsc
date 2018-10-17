@@ -20,8 +20,8 @@
 #define REG_DESTINATION       0x1C
 #define REG_DATA              0x20
 
-#define HPSC_MBOX_INT_A 0x1 // in our req-reply usage model, signifies request
-#define HPSC_MBOX_INT_B 0x2 // in our req-reply usage model, signifies reply
+#define HPSC_MBOX_INT_A 0x1 // receive interrupt
+#define HPSC_MBOX_INT_B 0x2 // ack interrupt
 
 #define HPSC_MBOX_DATA_REGS 16
 #define HPSC_MBOX_INTS 2
