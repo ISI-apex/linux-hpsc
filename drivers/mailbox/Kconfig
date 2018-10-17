@@ -121,6 +121,14 @@ config MAILBOX_TEST
 	  Test client to help with testing new Controller driver
 	  implementations.
 
+config MAILBOX_CLIENT_USERSPACE
+	tristate "Mailbox Client for Userspace Interface"
+	depends on OF
+	depends on HAS_IOMEM
+	help
+	  A mailbox client that exposes an interface into the mailbox
+          hardware to userspace through device files.
+
 config XGENE_SLIMPRO_MBOX
 	tristate "APM SoC X-Gene SLIMpro Mailbox Controller"
 	depends on ARCH_XGENE

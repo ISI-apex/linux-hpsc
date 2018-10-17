@@ -4,6 +4,8 @@ obj-$(CONFIG_MAILBOX)		+= mailbox.o
 
 obj-$(CONFIG_MAILBOX_TEST)	+= mailbox-test.o
 
+obj-$(CONFIG_MAILBOX_CLIENT_USERSPACE)	+= mailbox-client-userspace.o
+
 obj-$(CONFIG_ARM_MHU)	+= arm_mhu.o
 
 obj-$(CONFIG_PL320_MBOX)	+= pl320-ipc.o
