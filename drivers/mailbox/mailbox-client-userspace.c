@@ -26,14 +26,20 @@ struct devf_data {
         struct mbox_test_device *tdev;
         struct mbox_client      client;
 	spinlock_t		lock;
+	struct mbox_chan	*channel;
+
+        // Mailbox instance identifiers and config, stays constant
         unsigned instance_idx;
         bool incoming;
-	struct mbox_chan	*channel;
-	uint32_t                *rx_buffer;
+
+        // receive or tx buffer
+        // NOTE: could alloc on open to not spend heap mem on used mboxes,
+        //       don't bother for now since it's a small amount of mem
+	uint32_t                message[HPSC_MBOX_DATA_REGS];
+
         bool                    rx_msg;
         bool                    send_ack; // set when controller notifies us from its ACK ISR
         int                     send_rc;  // status code controller gives us for the ACK
-	char			*message; // TODO: use same buffer for rx and tx?
 };
 
 static void mbox_test_receive_message(struct mbox_client *client, void *message)
@@ -56,10 +62,10 @@ static void mbox_test_receive_message(struct mbox_client *client, void *message)
 
         // TODO: memcpy? Need 4-byte word reads, tho.
         for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i)
-                devf_data->rx_buffer[i] = msg[i];
+                devf_data->message[i] = msg[i];
 
         print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS,
-                             devf_data->rx_buffer, MBOX_MAX_MSG_LEN);
+                             devf_data->message, MBOX_MAX_MSG_LEN);
 
         devf_data->rx_msg = true;
 }
@@ -154,13 +160,6 @@ static int mbox_test_message_open(struct inode *inodep, struct file *filp)
                 return -EINVAL;
         }
 
-        if (devf_data->incoming) { // TODO re-use same buffer for tx and rx
-            devf_data->rx_buffer = devm_kzalloc(tdev->dev, MBOX_MAX_MSG_LEN, GFP_KERNEL);
-            if (!devf_data->rx_buffer) {
-                    dev_err(tdev->dev, "mailbox test: failed to alloc rx buf\n");
-                    return -ENOMEM;
-            }
-        }
         return rc;
 }
 
@@ -174,7 +173,6 @@ static int mbox_test_message_release(struct inode *inodep, struct file *filp)
         if (devf_data->channel) {
             mbox_free_channel(devf_data->channel);
             devf_data->channel = NULL;
-            // TODO: make sure rx_buffer is dealloced
         }
         spin_unlock(&devf_data->lock);
         return 0; // TODO: is there a default implementation that we need to call?
@@ -203,14 +201,6 @@ static ssize_t mbox_test_message_write(struct file *filp,
                 goto out;
 	}
 
-        // TODO: allocate on open? also re-use same buffer for rx and tx
-	devf_data->message = kzalloc(MBOX_MAX_MSG_LEN, GFP_KERNEL);
-	if (!devf_data->message) {
-		dev_err(tdev->dev, "failed to alloc msg buf\n");
-		ret = -ENOMEM;
-                goto out;
-        }
-
 	ret = copy_from_user(devf_data->message, userbuf, count);
 	if (ret) {
 		dev_err(tdev->dev, "failed to copy msg data from userspace\n");
@@ -235,8 +225,6 @@ static ssize_t mbox_test_message_write(struct file *filp,
         //       sent message by the other end
 out:
         spin_unlock(&devf_data->lock);
-	kfree(devf_data->message);
-
 	return ret < 0 ? ret : count;
 }
 
@@ -260,7 +248,7 @@ static ssize_t mbox_test_message_read(struct file *filp, char __user *userbuf,
             }
 
             ret = simple_read_from_buffer(userbuf, MBOX_MAX_MSG_LEN, ppos,
-                                           devf_data->rx_buffer, MBOX_MAX_MSG_LEN);
+                                           devf_data->message, MBOX_MAX_MSG_LEN);
             devf_data->rx_msg = false;
 
             // TODO: tell the controller to issue the ACK, since userspace has
