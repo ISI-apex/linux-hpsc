@@ -13,6 +13,7 @@
 #define MBOX_MAX_MSG_LEN	HPSC_MBOX_DATA_REGS * 4 // each reg is 32-bit
 
 #define DT_MBOXES_PROP  "mboxes"
+#define DT_MBOX_NAMES_PROP  "mbox-names"
 #define DT_MBOXES_CELLS "#mbox-cells"
 
 static struct dentry *root_debugfs_dir;
@@ -289,18 +290,37 @@ static int mbox_test_add_debugfs(struct platform_device *pdev,
 				 struct mbox_test_device *tdev)
 {
         struct devf_data *devf_data_ar, *devf_data;
+        struct device_node *dt_node = tdev->dev->of_node;
+        struct property *names_prop;
         char devf_name[16];
-        unsigned num_instances, i;
+        const char *mbox_name = NULL;
+        const char *fname;
+        int num_instances, i;
         int ret, rc;
 
 	if (!debugfs_initialized())
 		return 0;
 
+        num_instances = of_count_phandle_with_args(dt_node, DT_MBOXES_PROP,
+                                                   DT_MBOXES_CELLS);
+        dev_warn(tdev->dev, "%s: num instances in '%s' property: %d\n",
+                 __func__, DT_MBOXES_PROP, num_instances);
+        if (num_instances < 0) {
+		return -EINVAL;
+        }
 
-        num_instances = of_count_phandle_with_args(tdev->dev->of_node,
-                                DT_MBOXES_PROP, DT_MBOXES_CELLS);
-        dev_warn(tdev->dev, "%s: num instances in \"mboxes\" property: %d\n",
-                 __func__, num_instances);
+	names_prop = of_find_property(dt_node, DT_MBOX_NAMES_PROP, NULL);
+        if (names_prop) {
+                mbox_name = of_prop_next_string(names_prop, NULL);
+                if (!mbox_name)
+                    dev_err(&pdev->dev,
+                            "%s: no values in '%s' prop string list\n",
+                            __func__, DT_MBOX_NAMES_PROP);
+	} else {
+		dev_err(&pdev->dev,
+                      "%s: no '%s' property, not creating named device files\n",
+                      __func__, DT_MBOX_NAMES_PROP);
+        }
 
 	root_debugfs_dir = debugfs_create_dir("mailbox", NULL);
 	if (!root_debugfs_dir) {
@@ -324,16 +344,34 @@ static int mbox_test_add_debugfs(struct platform_device *pdev,
 
 	    spin_lock_init(&devf_data->lock);
 
-            // TODO: use name from DT node if given
-	    ret = snprintf(devf_name, sizeof(devf_name), "mbox%u", i);
-            if (ret < 0 || ret >= sizeof(devf_name)) {
-		dev_err(&pdev->dev, "failed to construct mbox device file name: rc %d\n", ret);
-                rc = -EFAULT;
-                goto fail;
+            if (mbox_name) { // name from DT node
+                fname = mbox_name;
+            } else { // index with a prefix
+                ret = snprintf(devf_name, sizeof(devf_name), "mbox%u", i);
+                if (ret < 0 || ret >= sizeof(devf_name)) {
+                        dev_err(&pdev->dev,
+                           "failed to construct mbox device file name: rc %d\n",
+                           ret);
+                        rc = -EFAULT;
+                        goto fail;
+                }
+                fname = devf_name;
             }
 
-            debugfs_create_file(devf_name, 0600, root_debugfs_dir,
+            debugfs_create_file(fname, 0600, root_debugfs_dir,
                                 devf_data, &mbox_test_message_ops);
+
+            if (names_prop) {
+                mbox_name = of_prop_next_string(names_prop, mbox_name);
+                if (!mbox_name && i < num_instances - 1) {
+                        dev_err(&pdev->dev,
+                           "fewer items in property '%s' than in property '%s'\n",
+                            DT_MBOX_NAMES_PROP, DT_MBOXES_PROP);
+                        rc = -EFAULT;
+                        // TODO: cleanup already created debugfs files?
+                        goto fail;
+                }
+            }
         }
 
         return 0;
