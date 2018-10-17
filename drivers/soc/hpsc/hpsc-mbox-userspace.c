@@ -12,7 +12,8 @@
 #define HPSC_MBOX_DATA_REGS     16
 #define MBOX_MAX_MSG_LEN	HPSC_MBOX_DATA_REGS * 4 // each reg is 32-bit
 
-#define NUM_INSTANCES 4 /* TODO: parse from DT node */
+#define DT_MBOXES_PROP  "mboxes"
+#define DT_MBOXES_CELLS "#mbox-cells"
 
 static struct dentry *root_debugfs_dir;
 
@@ -143,8 +144,9 @@ static int mbox_test_message_open(struct inode *inodep, struct file *filp)
         // If we want to make the direction dynamic, determined by file open
         // mode, we have the opposite problem: can't pass the direction to
         // the common mailbox framework, without modifying that interface.
-	if (of_parse_phandle_with_args(tdev->dev->of_node, "mboxes",
-				       "#mbox-cells", devf_data->instance_idx, &spec)) {
+	if (of_parse_phandle_with_args(tdev->dev->of_node,
+                                       DT_MBOXES_PROP, DT_MBOXES_CELLS,
+				       devf_data->instance_idx, &spec)) {
 		dev_warn(tdev->dev, "%s: can't parse \"mboxes\" property\n", __func__);
 		return -EINVAL;
 	}
@@ -288,11 +290,17 @@ static int mbox_test_add_debugfs(struct platform_device *pdev,
 {
         struct devf_data *devf_data_ar, *devf_data;
         char devf_name[16];
-        unsigned i;
+        unsigned num_instances, i;
         int ret, rc;
 
 	if (!debugfs_initialized())
 		return 0;
+
+
+        num_instances = of_count_phandle_with_args(tdev->dev->of_node,
+                                DT_MBOXES_PROP, DT_MBOXES_CELLS);
+        dev_warn(tdev->dev, "%s: num instances in \"mboxes\" property: %d\n",
+                 __func__, num_instances);
 
 	root_debugfs_dir = debugfs_create_dir("mailbox", NULL);
 	if (!root_debugfs_dir) {
@@ -300,13 +308,14 @@ static int mbox_test_add_debugfs(struct platform_device *pdev,
 		return -EINVAL;
 	}
 
-	devf_data_ar = devm_kzalloc(&pdev->dev, NUM_INSTANCES * sizeof(struct devf_data), GFP_KERNEL);
+
+	devf_data_ar = devm_kzalloc(&pdev->dev, num_instances * sizeof(struct devf_data), GFP_KERNEL);
 	if (devf_data_ar == NULL) {
 		dev_err(&pdev->dev, "failed to alloc mailbox instance state\n");
 		return -ENOMEM;
         }
 
-        for (i = 0; i < NUM_INSTANCES; ++i) { // TODO: get instance count from DT node
+        for (i = 0; i < num_instances; ++i) {
             devf_data = &devf_data_ar[i];
 
             devf_data->dev = &pdev->dev;
