@@ -272,10 +272,13 @@ static ssize_t mbox_test_message_read(struct file *filp, char __user *userbuf,
                                            mbox_chan_dev->message, MBOX_MAX_MSG_LEN);
             mbox_chan_dev->rx_msg_pending = false;
 
-            // TODO: tell the controller to issue the ACK, since userspace has
+            // Tell the controller to issue the ACK, since userspace has
             // taken the message from the kernel, so the remote sender may send
             // the next message, with the guarantee that we have an empty buffer
             // to accept it (since we have a buffer of size 1 message only).
+            // NOTE: yes, this is abuse of the method, but otherwise we need to
+            // add another method to the interface.
+            mbox_client_peek_data(mbox_chan_dev->channel);
 
         } else { // outgoing, return the ACK
 

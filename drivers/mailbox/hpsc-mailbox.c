@@ -62,11 +62,6 @@ static irqreturn_t hpsc_mbox_rcv_irq(int irq, void *dev_id)
         dev_dbg(mbox->controller.dev, "clear int A\n");
         writel(HPSC_MBOX_INT_A, chan->regs + REG_INT_CLEAR);
 
-        // TOOD: either ackowledge now, or add an ack() method to the mailbox API,
-        // for the client to call when it can accept
-        dev_dbg(mbox->controller.dev, "set int B\n");
-        writel(HPSC_MBOX_INT_B, chan->regs + REG_INT_SET);
-
 	return IRQ_HANDLED;
 }
 
@@ -106,6 +101,24 @@ static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
 
 	//spin_unlock(&mbox->lock);
 	return 0;
+}
+
+// This function is overloaded/abused, its purpose is changed to:
+// the client notifies the controller that the client's receive
+// buffer in the kernel is free (i.e. userspace has read the message) so that
+// client can receive the next message from the remote sender. Here, the
+// controller uses this notification event to send the ack to the remote
+// sender. The remote sender is expected to not send another message
+// until getting an ACK.
+static bool hpsc_mbox_peek_data(struct mbox_chan *link)
+{
+	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
+	struct hpsc_mbox_chan *chan = link->con_priv;
+
+        dev_dbg(mbox->controller.dev, "client notified of receipt: set int B\n");
+        writel(HPSC_MBOX_INT_B, chan->regs + REG_INT_SET);
+
+        return false;
 }
 
 static int hpsc_mbox_startup(struct mbox_chan *link)
@@ -161,9 +174,10 @@ static void hpsc_mbox_shutdown(struct mbox_chan *link)
 }
 
 static const struct mbox_chan_ops hpsc_mbox_chan_ops = {
-	.send_data	= hpsc_mbox_send_data,
-	.startup	= hpsc_mbox_startup,
-	.shutdown	= hpsc_mbox_shutdown,
+        .startup	= hpsc_mbox_startup,
+        .shutdown	= hpsc_mbox_shutdown,
+        .send_data	= hpsc_mbox_send_data,
+        .peek_data      = hpsc_mbox_peek_data,
 };
 
 /* Parse the channel identifiers from client's device tree node */
