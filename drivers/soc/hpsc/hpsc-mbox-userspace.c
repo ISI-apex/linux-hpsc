@@ -52,7 +52,7 @@ static int num_chans = 0;
 static struct mbox_chan_dev *mbox_chan_dev_ar;
 
 
-static void mbox_test_receive_message(struct mbox_client *client, void *message)
+static void mbox_received(struct mbox_client *client, void *message)
 {
 	struct mbox_chan_dev *mbox_chan_dev = container_of(client, struct mbox_chan_dev, client);
 	struct mbox_client_dev *tdev = mbox_chan_dev->tdev;
@@ -80,7 +80,7 @@ static void mbox_test_receive_message(struct mbox_client *client, void *message)
         mbox_chan_dev->rx_msg_pending = true;
 }
 
-static void mbox_test_message_sent(struct mbox_client *client,
+static void mbox_sent(struct mbox_client *client,
 				   void *message, int r)
 {
 	struct mbox_chan_dev *mbox_chan_dev = container_of(client, struct mbox_chan_dev, client);
@@ -99,13 +99,13 @@ static void mbox_test_message_sent(struct mbox_client *client,
 }
 
 static struct mbox_chan *
-mbox_test_request_channel(struct mbox_client *client, struct device *dev, unsigned index)
+request_channel(struct mbox_client *client, struct device *dev, unsigned index)
 {
 	struct mbox_chan *channel;
 
 	client->dev		= dev;
-        client->rx_callback	= mbox_test_receive_message;
-        client->tx_done         = mbox_test_message_sent;
+        client->rx_callback	= mbox_received;
+        client->tx_done         = mbox_sent;
         client->tx_block	= false;
         client->knows_txdone    = false;
 
@@ -118,7 +118,7 @@ mbox_test_request_channel(struct mbox_client *client, struct device *dev, unsign
 	return channel;
 }
 
-static int mbox_test_message_open(struct inode *inodep, struct file *filp)
+static int mbox_open(struct inode *inodep, struct file *filp)
 {
 	struct mbox_chan_dev *mbox_chan_dev;
 	struct mbox_client_dev *tdev;
@@ -148,7 +148,7 @@ static int mbox_test_message_open(struct inode *inodep, struct file *filp)
         // only one thread will make it here
 
         dev_info(tdev->dev, "mbox_chan_dev: %p\n", mbox_chan_dev);
-	mbox_chan_dev->channel = mbox_test_request_channel(&mbox_chan_dev->client, tdev->dev, mbox_chan_dev->instance_idx);
+	mbox_chan_dev->channel = request_channel(&mbox_chan_dev->client, tdev->dev, mbox_chan_dev->instance_idx);
         if (!mbox_chan_dev->channel) {
                 dev_err(tdev->dev, "request for mbox channel idx %u failed\n",
                         mbox_chan_dev->instance_idx);
@@ -189,7 +189,7 @@ static int mbox_test_message_open(struct inode *inodep, struct file *filp)
         return 0;
 }
 
-static int mbox_test_message_release(struct inode *inodep, struct file *filp)
+static int mbox_release(struct inode *inodep, struct file *filp)
 {
 	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
 
@@ -204,7 +204,7 @@ static int mbox_test_message_release(struct inode *inodep, struct file *filp)
         return 0; // TODO: is there a default implementation that we need to call?
 }
 
-static ssize_t mbox_test_message_write(struct file *filp,
+static ssize_t mbox_write(struct file *filp,
 				       const char __user *userbuf,
 				       size_t count, loff_t *ppos)
 {
@@ -254,7 +254,7 @@ out:
 	return ret < 0 ? ret : count;
 }
 
-static ssize_t mbox_test_message_read(struct file *filp, char __user *userbuf,
+static ssize_t mbox_read(struct file *filp, char __user *userbuf,
 				      size_t count, loff_t *ppos)
 {
 	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
@@ -306,10 +306,10 @@ out:
 }
 
 static const struct file_operations mbox_fops = {
-	.write	= mbox_test_message_write,
-	.read	= mbox_test_message_read,
-	.open	= mbox_test_message_open,
-	.release = mbox_test_message_release,
+	.write	= mbox_write,
+	.read	= mbox_read,
+	.open	= mbox_open,
+	.release = mbox_release,
 };
 
 static int mbox_device_create(struct mbox_chan_dev *mbox_chan_dev,
