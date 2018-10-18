@@ -41,10 +41,6 @@ struct hpsc_mbox_chan {
         bool incoming;
         unsigned rcv_irqnum;
         unsigned ack_irqnum;
-#if 0
-        unsigned long owner;
-        unsigned long destination;
-#endif
         unsigned int_enabled;
 };
 
@@ -124,43 +120,13 @@ static int hpsc_mbox_startup(struct mbox_chan *link)
         // that means modifying the common mbox interface
 
         if (chan->incoming) {
-            // TODO: check readl(mbox->regs + REG_DESTINATION) == self_bus_id()
-
             enable_irq(chan->rcv_irqnum);
 
-            // should be allowed because we should be the destination
 	    dev_dbg(mbox->controller.dev, "enable int A (rcv)\n");
-
             val = readl(chan->regs + REG_INT_ENABLE);
             writel(val | HPSC_MBOX_INT_A, chan->regs + REG_INT_ENABLE);
 
         } else { // TX
-
-#if 0
-            // Even though owner/destination is fixed per boot (specified in
-            // device tree node for the mailbox client), we have to claim here,
-            // instead of somewhere once on boot, because the IP will remain
-            // powered if owner is assigned.
-	    dev_dbg(mbox->controller.dev, "set owner: %lx\n", chan_state->owner);
-            writel(chan_state->owner, mbox->regs + REG_OWNER);
-            owner = readl(mbox->regs + REG_OWNER);
-            if (owner != chan_state->owner) {
-                if (owner) {
-                    dev_err(mbox->controller.dev, "failed to claim mailbox for %lx: "
-                                                  "already owned by %lx\n",
-                            chan_state->owner, owner);
-                } else {
-                    dev_err(mbox->controller.dev, "failed to claim mailbox for busid %lx: "
-                                                  "not running on cpu with that busid\n",
-                              chan_state->owner);
-                }
-                return -EBUSY;
-            }
-
-	    dev_dbg(mbox->controller.dev, "set destination: %lu\n", chan_state->destination);
-            writel(chan_state->destination, mbox->regs + REG_DESTINATION);
-#endif
-
             enable_irq(chan->ack_irqnum);
 
 	    dev_dbg(mbox->controller.dev, "enable int B (ack)\n");
@@ -191,13 +157,6 @@ static void hpsc_mbox_shutdown(struct mbox_chan *link)
             writel(ie & ~HPSC_MBOX_INT_B, chan->regs + REG_INT_ENABLE);
 
             disable_irq(chan->ack_irqnum);
-
-#if 0
-	    dev_dbg(mbox->controller.dev, "clear destination\n");
-            writel(0, mbox->regs + REG_DESTINATION);
-	    dev_dbg(mbox->controller.dev, "clear owner\n");
-            writel(0, mbox->regs + REG_OWNER);
-#endif
         }
 }
 
@@ -224,10 +183,6 @@ static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
        // Slightly not nice, since adding side-effects to an otherwise pure function
        chan = (struct hpsc_mbox_chan *)link->con_priv;
        chan->incoming = sp->args[1];
-#if 0
-       chan->owner = sp->args[2];
-       chan->destination = sp->args[3];
-#endif
 
        return link;
 }
