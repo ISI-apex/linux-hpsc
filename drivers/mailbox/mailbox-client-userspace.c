@@ -442,7 +442,7 @@ static int mbox_create_dev_files(struct platform_device *pdev,
 
         return 0;
 fail_dev:
-        for (--i; i <= 0; --i) // i-th has failed, so no cleanup for i-th
+        for (--i; i >= 0; --i) // i-th has failed, so no cleanup for i-th
                 mbox_device_destroy(&mbox_chan_dev_ar[i], major_num, i, class);
         class_destroy(class);
 fail_class:
