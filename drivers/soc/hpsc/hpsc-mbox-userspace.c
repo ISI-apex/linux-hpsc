@@ -149,7 +149,12 @@ static int mbox_test_message_open(struct inode *inodep, struct file *filp)
 
         dev_info(tdev->dev, "mbox_chan_dev: %p\n", mbox_chan_dev);
 	mbox_chan_dev->channel = mbox_test_request_channel(&mbox_chan_dev->client, tdev->dev, mbox_chan_dev->instance_idx);
-        dev_info(tdev->dev, "tx channel: %p\n", mbox_chan_dev->channel);
+        if (!mbox_chan_dev->channel) {
+                dev_err(tdev->dev, "request for mbox channel idx %u failed\n",
+                        mbox_chan_dev->instance_idx);
+                spin_unlock(&mbox_chan_dev->lock);
+                return -EIO;
+        }
         spin_unlock(&mbox_chan_dev->lock);
 
         // Yes, framework also parses this prop, but we need the metadata about
