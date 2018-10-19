@@ -37,8 +37,13 @@ struct hpsc_mbox {
 struct hpsc_mbox_chan {
         struct hpsc_mbox *mbox;
 	void __iomem *regs;
+
+        // Config from DT, stays constant
         unsigned instance;
         bool incoming;
+        unsigned owner;
+        unsigned dest;
+
         unsigned rcv_irqnum;
         unsigned ack_irqnum;
         unsigned int_enabled;
@@ -125,12 +130,38 @@ static int hpsc_mbox_startup(struct mbox_chan *link)
 {
 	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
 	struct hpsc_mbox_chan *chan = link->con_priv;
-        u32 val;
+        u32 val, dest;
 
         // TODO: can this also race with ISR? race through client API?
 
-        // Alternatively, could also take properies from mbox_client, but
-        // that means modifying the common mbox interface
+
+        // Note: owner+dest is entirely orthogonal to direction.
+        // Note; owner+dest are entirely optional, may set both to zero in DT
+        // Note: owner/dest access is not enforced by HW, it can only
+        //       serve as a mild sanity check.
+        if (chan->owner) {
+            dev_dbg(mbox->controller.dev, "set owner: %p <- %x\n",
+                    chan->regs + REG_OWNER, chan->owner);
+            writel(chan->owner, chan->regs + REG_OWNER);
+        }
+
+        if (chan->dest) {
+                if (chan->owner) { // we are onwer, so set destination
+                    dev_dbg(mbox->controller.dev, "write dest: %p <- %x\n",
+                            chan->regs + REG_DESTINATION, chan->dest);
+                    writel(chan->dest, chan->regs + REG_DESTINATION);
+                } else { // we are not the owner, only check
+                    dest = readl(chan->regs + REG_DESTINATION);
+                    dev_dbg(mbox->controller.dev, "read dest: %p -> %x\n",
+                            chan->regs + REG_DESTINATION, dest);
+                    if (chan->dest != dest) {
+                        dev_err(mbox->controller.dev,
+                                "destination mismatch: %x (expected %x)\n",
+                                dest, chan->dest);
+                        return -EBUSY;
+                    }
+                }
+        }
 
         if (chan->incoming) {
             enable_irq(chan->rcv_irqnum);
@@ -171,6 +202,14 @@ static void hpsc_mbox_shutdown(struct mbox_chan *link)
 
             disable_irq(chan->ack_irqnum);
         }
+
+        if (chan->owner) {
+                dev_dbg(mbox->controller.dev, "clear owner: %p <- 0\n",
+                        chan->regs + REG_OWNER);
+                writel(0, chan->regs + REG_OWNER);
+
+                // clearing owner also clears dest (resets the instance)
+        }
 }
 
 static const struct mbox_chan_ops hpsc_mbox_chan_ops = {
@@ -187,7 +226,7 @@ static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
        struct mbox_chan *link;
        struct hpsc_mbox_chan *chan;
 
-       if (sp->args_count != 2) {
+       if (sp->args_count != 4) {
 	       dev_err(mbox->dev, "invalid mailbox instance reference in DT node\n");
                return NULL;
         }
@@ -197,6 +236,8 @@ static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
        // Slightly not nice, since adding side-effects to an otherwise pure function
        chan = (struct hpsc_mbox_chan *)link->con_priv;
        chan->incoming = sp->args[1];
+       chan->owner = sp->args[2];
+       chan->dest = sp->args[3];
 
        return link;
 }
