@@ -2,6 +2,20 @@
 
 #include <dt-bindings/phy/phy.h>
 
+#define MASTER_ID_TRCH_CPU  0x2d
+
+#define MASTER_ID_RTPS_CPU0 0x2e
+#define MASTER_ID_RTPS_CPU1 0x2f
+
+#define MASTER_ID_HPPS_CPU0 0x80
+#define MASTER_ID_HPPS_CPU1 0x8d
+#define MASTER_ID_HPPS_CPU2 0x8e
+#define MASTER_ID_HPPS_CPU3 0x8f
+#define MASTER_ID_HPPS_CPU4 0x90
+#define MASTER_ID_HPPS_CPU5 0x9d
+#define MASTER_ID_HPPS_CPU6 0x9e
+#define MASTER_ID_HPPS_CPU7 0x9f
+
 / {
 	model = "HPSC";
 	compatible = "xlnx,zynqmp";
@@ -369,16 +383,23 @@
                                      <0 188 4>, <0 189 4>, <0 190 4>, <0 191 4>,
                                      <0 192 4>, <0 193 4>, <0 194 4>, <0 195 4>,
                                      <0 196 4>, <0 197 4>, <0 198 4>, <0 199 4>;
-			#mbox-cells = <2>; /* instance index, direction (is incoming) */
+			#mbox-cells = <4>;
+                        /* instance index,
+                           direction (1=incoming),
+                           owner (0=do not claim, else set owner reg to this value),
+                           destination (if dest is not 0,
+                                          if not owner, then dest reg checked against this value,
+                                          if owner and, dest reg is set to this value) */
 		};
 
 		mailbox_client {
 			compatible = "mailbox-client-userspace";
-			mboxes =  /* ip block, intance index, dir (1=incoming) */
-                                  <&hpps_mailbox  0  0>,
-                                  <&hpps_mailbox  1  1>,
-			          <&hpps_mailbox  2  0>,
-                                  <&hpps_mailbox  3  1>;
+			mboxes =  /* ip block, intance index, dir, owner, dest */
+                                  <&hpps_mailbox  0  0  0  MASTER_ID_HPPS_CPU0>,
+                                  <&hpps_mailbox  1  1  0  MASTER_ID_HPPS_CPU0>,
+			          <&hpps_mailbox  2  0  0  MASTER_ID_HPPS_CPU0>,
+                                  <&hpps_mailbox  3  1  0  MASTER_ID_HPPS_CPU0>;
+                        /* NOTE: destination is just an identifier, mboxes accessible from any core */
                         /* names optional, if not given, dev files named 'mbox%u' by index */
 			mbox-names = "mbox_trch_out",
                                      "mbox_trch_in",
