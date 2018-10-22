@@ -129,6 +129,14 @@ config MAILBOX_CLIENT_USERSPACE
 	  A mailbox client that exposes an interface into the mailbox
           hardware to userspace through device files.
 
+config HPSC_MBOX_CLIENT_KERNEL
+	tristate "Mailbox Client for Kernel Interface"
+	depends on OF
+	depends on HPSC_MBOX
+	help
+	  A mailbox client that exposes an interface into the mailbox
+          hardware to other kernel components for messaging.
+
 config XGENE_SLIMPRO_MBOX
 	tristate "APM SoC X-Gene SLIMpro Mailbox Controller"
 	depends on ARCH_XGENE
