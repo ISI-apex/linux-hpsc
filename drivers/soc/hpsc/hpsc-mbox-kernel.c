@@ -29,12 +29,8 @@ struct mbox_chan_dev {
 	struct mbox_client	client;
 	spinlock_t		lock;
 	struct mbox_chan	*channel;
-
-	// Mailbox instance identifiers and config, stays constant
-	unsigned		instance_idx;
-
-	bool			send_ack; // set when controller notifies us from its ACK ISR
-	int			send_rc;  // status code controller gives us for the ACK
+	// set when controller notifies us from its ACK ISR
+	bool			send_ack;
 };
 
 static struct mbox_chan_dev *mbox_chan_dev_ar;
@@ -70,7 +66,6 @@ static void client_tx_done(struct mbox_client *cl, void *msg, int r)
 	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev, client);
 	spin_lock(&cdev->lock);
 	cdev->send_ack = true;
-	cdev->send_rc = r;
 	spin_unlock(&cdev->lock);
 	if (r)
 		dev_warn(cl->dev, "tx_done: got NACK%d\n", r);
@@ -92,15 +87,13 @@ static int hpsc_mbox_client_kernel_send(void *msg)
 		goto send_out;
 	}
 	ret = mbox_send_message(cdev->channel, msg);
-	if (ret >= 0) {
+	if (ret >= 0)
 		cdev->send_ack = false;
-		cdev->send_rc = 0;
-	}
-send_out:
-	spin_unlock(&cdev->lock);
-	if (ret < 0)
+	else
 		dev_err(cdev->tdev->dev, "Failed to send mailbox message: %d\n",
 			ret);
+send_out:
+	spin_unlock(&cdev->lock);
 	return ret;
 }
 
@@ -163,46 +156,36 @@ static int hpsc_mbox_client_kernel_probe(struct platform_device *pdev)
 			ret = -EINVAL;
 			goto fail_channel;
 		}
+		of_node_put(spec.np);
 		if (i != spec.args[1]) {
 			// device tree not configured properly
 			// index 0 is mbox out and index 1 is mbox in
 			dev_err(tdev->dev, "First '%s' entry must be outbound, second must be inbound\n",
 				DT_MBOXES_PROP);
 			ret = -EINVAL;
-			of_node_put(spec.np);
 			goto fail_channel;
 		}
-		of_node_put(spec.np);
-		cdev->instance_idx = i;
 		cdev->tdev = tdev;
 		hpsc_mbox_client_init(&cdev->client, tdev->dev);
 		spin_lock_init(&cdev->lock);
-		// lock to hold pending messages until we register notification handler
+		// lock holds pending messages until we register notif handler
 		spin_lock(&cdev->lock);
-		cdev->channel = mbox_request_channel(&cdev->client, cdev->instance_idx);
+		cdev->channel = mbox_request_channel(&cdev->client, i);
 		if (IS_ERR(cdev->channel)) {
-			dev_err(tdev->dev, "Failed to request channel: %u\n",
-				cdev->instance_idx);
-			ret = -EIO;
+			dev_err(tdev->dev, "Channel request failed: %u\n", i);
+			ret = PTR_ERR(cdev->channel);
 			spin_unlock(&cdev->lock);
 			goto fail_channel;
 		}
 		cdev->send_ack = true;
-		cdev->send_rc = 0;
 	}
-
+	// register with notification handler
 	ret = hpsc_notif_handler_register(notif_h);
-	for (i = 0; i < DT_MBOXES_COUNT; i++)
-		// now we can release the lock to receive pending messages
-		spin_unlock(&mbox_chan_dev_ar[i].lock);
 	BUG_ON(ret); // shouldn't fail if we setup notif_h correctly
+	// now we can release the lock to receive pending messages
+	for (i = 0; i < DT_MBOXES_COUNT; i++)
+		spin_unlock(&mbox_chan_dev_ar[i].lock);
 	dev_info(&pdev->dev, "Mailbox client kernel module registered\n");
-#if 0
-	// send echo request test message to TRCH
-	u32 msg[HPSC_MBOX_CLIENT_KERNEL_MSG_LEN / sizeof(u32)] = { 1, 42 };
-	ret = hpsc_notif_send(msg, sizeof(msg));
-	dev_warn(tdev->dev, "Test message send: %d\n", ret);
-#endif
 	return 0;
 
 fail_channel:
@@ -210,7 +193,6 @@ fail_channel:
 		cdev = &mbox_chan_dev_ar[i];
 		mbox_free_channel(cdev->channel);
 		cdev->channel = NULL;
-		// remember to release lock
 		spin_unlock(&cdev->lock);
 	}
 	return ret;
@@ -220,6 +202,7 @@ static int hpsc_mbox_client_kernel_remove(struct platform_device *pdev)
 {
 	int i;
 	dev_info(&pdev->dev, "Mailbox client kernel module: remove\n");
+	// unregister with notification handler
 	hpsc_notif_handler_unregister(notif_h);
 	// close channels
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
