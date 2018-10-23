@@ -133,6 +133,7 @@ config HPSC_MBOX_CLIENT_KERNEL
 	tristate "Mailbox Client for Kernel Interface"
 	depends on OF
 	depends on HPSC_MBOX
+	depends on ARCH_HPSC
 	help
 	  A mailbox client that exposes an interface into the mailbox
           hardware to other kernel components for messaging.
