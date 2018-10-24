@@ -8,9 +8,8 @@
 #include <linux/hpsc_notif.h>
 
 // callback functions for message types
-typedef void (hpsc_notif_rx)(u8 type, void *msg, size_t sz);
 // TODO: hardcode entries once we work out message processing
-static hpsc_notif_rx *notif_cbs[HPSC_NOTIF_TYPE_COUNT];
+static void (*notif_cbs[HPSC_NOTIF_TYPE_COUNT])(u8 type, void *msg, size_t sz);
 
 static LIST_HEAD(notif_cons);
 static DEFINE_MUTEX(con_mutex);
