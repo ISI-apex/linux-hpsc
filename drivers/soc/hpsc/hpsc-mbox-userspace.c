@@ -1,3 +1,4 @@
+#include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/err.h>
@@ -8,8 +9,8 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/types.h>
 #include <linux/uaccess.h>
-#include <linux/cdev.h>
 
 #define HPSC_MBOX_DATA_REGS	16
 #define MBOX_MAX_MSG_LEN	(HPSC_MBOX_DATA_REGS * 4) // each reg is 32-bit
@@ -38,7 +39,7 @@ struct mbox_chan_dev {
 	// receive or tx buffer
 	// NOTE: could alloc on open to not spend heap mem on unused mboxes,
 	//       don't bother for now since it's a small amount of mem
-	uint32_t		message[HPSC_MBOX_DATA_REGS];
+	u32			message[HPSC_MBOX_DATA_REGS];
 
 	bool			rx_msg_pending; // a received message is ready to be read
 	bool			send_ack; // set when controller notifies us from its ACK ISR
@@ -55,66 +56,35 @@ static struct mbox_chan_dev *mbox_chan_dev_ar;
 static void mbox_received(struct mbox_client *client, void *message)
 {
 	struct mbox_chan_dev *mbox_chan_dev = container_of(client, struct mbox_chan_dev, client);
-	struct mbox_client_dev *tdev = mbox_chan_dev->tdev;
-	uint32_t *msg = message;
+	u32 *msg = message;
 	unsigned i;
 
-	// We don't need to lock here, because this is called from the receive ISR
-	// and ISRs for the same IRQ are serialized.
-
-	// TODO: so this can't race with itself, but can still race calls into
-	// open/read/write/close from userspace
-
+	spin_lock(&mbox_chan_dev->lock);
 	if (mbox_chan_dev->rx_msg_pending) {
-		dev_err(tdev->dev, "rx: dropped message: buffer full\n");
-		return;
+		dev_err(mbox_chan_dev->tdev->dev,
+			"rx: dropped message: buffer full\n");
+	} else {
+		// can't memcpy, need 4-byte word reads
+		for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i)
+			mbox_chan_dev->message[i] = msg[i];
+		mbox_chan_dev->rx_msg_pending = true;
+		print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS,
+				     mbox_chan_dev->message, MBOX_MAX_MSG_LEN);
 	}
-
-	// TODO: memcpy? Need 4-byte word reads, tho.
-	for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i)
-		mbox_chan_dev->message[i] = msg[i];
-
-	print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS,
-			     mbox_chan_dev->message, MBOX_MAX_MSG_LEN);
-
-	mbox_chan_dev->rx_msg_pending = true;
+	spin_unlock(&mbox_chan_dev->lock);
 }
 
 static void mbox_sent(struct mbox_client *client, void *message, int r)
 {
 	struct mbox_chan_dev *mbox_chan_dev = container_of(client, struct mbox_chan_dev, client);
-
-	// TODO: so this can't race with itself, but can still race calls into
-	// open/read/write/close from userspace
-
+	spin_lock(&mbox_chan_dev->lock);
 	if (r)
 		dev_warn(client->dev, "send: got NACK%d\n", r);
 	else
 		dev_info(client->dev, "sent: got ACK\n");
-
 	mbox_chan_dev->send_rc = r;
 	mbox_chan_dev->send_ack = true;
-	// TODO: set an [N]ACK flag so that read() on an !incoming mbox return success
-}
-
-static struct mbox_chan *
-request_channel(struct mbox_client *client, struct device *dev, unsigned index)
-{
-	struct mbox_chan *channel;
-
-	client->dev		= dev;
-	client->rx_callback	= mbox_received;
-	client->tx_done		= mbox_sent;
-	client->tx_block	= false;
-	client->knows_txdone	= false;
-
-	channel = mbox_request_channel(client, index);
-	if (IS_ERR(channel)) {
-		dev_warn(dev, "Failed to request %u channel\n", index);
-		return NULL;
-	}
-
-	return channel;
+	spin_unlock(&mbox_chan_dev->lock);
 }
 
 static int mbox_open(struct inode *inodep, struct file *filp)
@@ -122,42 +92,28 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	struct mbox_chan_dev *mbox_chan_dev;
 	struct mbox_client_dev *tdev;
 	struct of_phandle_args spec;
+	int ret;
 
 	unsigned int major = imajor(inodep);
 	unsigned int minor = iminor(inodep);
 
-	if (major != major_num || minor < 0 || minor >= num_chans)
+	if (major != major_num || minor >= num_chans)
 		return -ENODEV;
 
 	mbox_chan_dev = &mbox_chan_dev_ar[minor];
 	tdev = mbox_chan_dev->tdev;
 
-	filp->private_data = mbox_chan_dev;
-
-	spin_lock(&mbox_chan_dev->lock); // protects mbox_chan_dev->channel pointer
-
-	// TODO: race with ISR?
+	spin_lock(&mbox_chan_dev->lock);
 
 	if (mbox_chan_dev->channel) {
-		spin_unlock(&mbox_chan_dev->lock);
 		dev_info(tdev->dev, "mailbox %u already claimed\n",
 			 mbox_chan_dev->instance_idx);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto out;
 	}
 
 	// only one thread will make it here
-
-	dev_info(tdev->dev, "mbox_chan_dev: %p\n", mbox_chan_dev);
-	mbox_chan_dev->channel = request_channel(&mbox_chan_dev->client,
-						 tdev->dev,
-						 mbox_chan_dev->instance_idx);
-	if (!mbox_chan_dev->channel) {
-		dev_err(tdev->dev, "request for mbox channel idx %u failed\n",
-			mbox_chan_dev->instance_idx);
-		spin_unlock(&mbox_chan_dev->lock);
-		return -EIO;
-	}
-	spin_unlock(&mbox_chan_dev->lock);
+	filp->private_data = mbox_chan_dev;
 
 	// Yes, framework also parses this prop, but we need the metadata about
 	// the direction of the channel here, and we can't get it through the
@@ -173,38 +129,52 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	if (of_parse_phandle_with_args(tdev->dev->of_node,
 				       DT_MBOXES_PROP, DT_MBOXES_CELLS,
 				       mbox_chan_dev->instance_idx, &spec)) {
-		dev_warn(tdev->dev, "%s: can't parse \"mboxes\" property\n",
-			 __func__);
-		return -EINVAL;
+		dev_err(tdev->dev, "%s: can't parse '%s' property\n",
+			__func__, DT_MBOXES_PROP);
+		ret = -EINVAL;
+		goto out;
 	}
-
 	// NOTE: protocol also in of_xlate in mbox controller
 	mbox_chan_dev->incoming = spec.args[1];
+	of_node_put(spec.np);
 
 	// We allow reading of outgoing mbox (to get the [N]ACK), but not
 	// writing of incoming mbox.
-	/* mbox_chan_dev->incoming populated by the request call above */
 	if (mbox_chan_dev->incoming && filp->f_mode & FMODE_WRITE) {
 		dev_err(tdev->dev, "mailbox test: file access mode disagrees with spec in DT node\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out;
 	}
 
-	return 0;
+	dev_dbg(tdev->dev, "mbox_chan_dev: %p\n", mbox_chan_dev);
+	mbox_chan_dev->channel = mbox_request_channel(&mbox_chan_dev->client,
+						      mbox_chan_dev->instance_idx);
+	if (IS_ERR(mbox_chan_dev->channel)) {
+		dev_err(tdev->dev, "request for mbox channel idx %u failed\n",
+			mbox_chan_dev->instance_idx);
+		mbox_chan_dev->channel = NULL;
+		ret = -EIO;
+		goto out;
+	}
+
+	ret = 0;
+
+out:
+	spin_unlock(&mbox_chan_dev->lock);
+	return ret;
 }
 
 static int mbox_release(struct inode *inodep, struct file *filp)
 {
 	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
-
-	// TODO: race with ISR
-
-	spin_lock(&mbox_chan_dev->lock); // bad user might share FD among threads
+	// bad user might share FD among threads
+	spin_lock(&mbox_chan_dev->lock);
 	if (mbox_chan_dev->channel) {
 		mbox_free_channel(mbox_chan_dev->channel);
 		mbox_chan_dev->channel = NULL;
 	}
 	spin_unlock(&mbox_chan_dev->lock);
-	return 0; // TODO: is there a default implementation that we need to call?
+	return 0;
 }
 
 static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
@@ -214,13 +184,13 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 	struct mbox_client_dev *tdev = mbox_chan_dev->tdev;
 	int ret;
 
-	spin_lock(&mbox_chan_dev->lock); // bad user might share FD among threads
-
-	// TODO: race with ISR
+	// bad user might share FD among threads
+	spin_lock(&mbox_chan_dev->lock);
 
 	BUG_ON(!mbox_chan_dev->channel);
-	BUG_ON(mbox_chan_dev->incoming); // file mode should not call this func
-					 // TODO: unless we add getting ACK through read of !incoming mbox
+	// file mode should not call this func
+	// TODO: unless we add getting ACK through read of !incoming mbox
+	BUG_ON(mbox_chan_dev->incoming);
 
 	if (count > MBOX_MAX_MSG_LEN) {
 		dev_err(tdev->dev, "message too long: %zd > %d\n", count,
@@ -249,7 +219,7 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 		goto out;
 	}
 
-	// TODO: return from here does not indicate successful receipt of
+	// Note: successful return here does not indicate successful receipt of
 	//       sent message by the other end
 out:
 	spin_unlock(&mbox_chan_dev->lock);
@@ -262,11 +232,8 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
 	int ret;
 
-	// TODO: read of !incoming mailbox should return acknowledgement
-
-	spin_lock(&mbox_chan_dev->lock); // bad user might share FD among threads
-
-	// TODO: race with ISR
+	// bad user might share FD among threads
+	spin_lock(&mbox_chan_dev->lock);
 
 	if (mbox_chan_dev->incoming) {
 
@@ -299,7 +266,7 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 					      &mbox_chan_dev->send_rc,
 					      sizeof(mbox_chan_dev->send_rc));
 
-		// If we clear here, then userspace can only fetch the [N]ACK once
+		// If we clear here, then userspace can only fetch [N]ACK once
 		mbox_chan_dev->send_ack = false;
 		mbox_chan_dev->send_rc = 0;
 	}
@@ -309,22 +276,35 @@ out:
 }
 
 static const struct file_operations mbox_fops = {
+	.owner		= THIS_MODULE,
 	.write		= mbox_write,
 	.read		= mbox_read,
 	.open		= mbox_open,
 	.release	= mbox_release,
 };
 
-static int mbox_device_create(struct mbox_chan_dev *mbox_chan_dev, int major,
+static void mbox_client_init(struct mbox_client *cl, struct device *dev)
+{
+	cl->dev			= dev;
+	cl->rx_callback		= mbox_received;
+	cl->tx_done		= mbox_sent;
+	cl->tx_block		= false;
+	cl->knows_txdone	= false;
+}
+
+static int mbox_device_create(struct mbox_chan_dev *mbox_chan_dev,
+			      struct mbox_client_dev *tdev, int major,
 			      int minor, struct class *class, const char *name)
 {
-	int rc = 0;
-	struct mbox_client_dev *tdev = mbox_chan_dev->tdev;
-	dev_t devno = MKDEV(major, minor);
 	struct device *device;
+	int rc;
+	dev_t devno = MKDEV(major, minor);
 
+	mbox_chan_dev->tdev = tdev;
+	mbox_chan_dev->instance_idx = minor;
+	mbox_client_init(&mbox_chan_dev->client, tdev->dev);
+	spin_lock_init(&mbox_chan_dev->lock);
 	cdev_init(&mbox_chan_dev->cdev, &mbox_fops);
-	mbox_chan_dev->cdev.owner = THIS_MODULE;
 
 	rc = cdev_add(&mbox_chan_dev->cdev, devno, 1);
 	if (rc) {
@@ -332,16 +312,15 @@ static int mbox_device_create(struct mbox_chan_dev *mbox_chan_dev, int major,
 		return rc;
 	}
 
-	// TODO: double check that device_destroy doesn't need this pointer
 	device = device_create(class, /* parent */ NULL, devno, NULL, name);
-
 	if (IS_ERR(device)) {
 		rc = PTR_ERR(device);
 		dev_err(tdev->dev, "%s: failed to create device\n", __func__);
 		cdev_del(&mbox_chan_dev->cdev);
 		return rc;
 	}
-	return rc;
+
+	return 0;
 }
 
 static void mbox_device_destroy(struct mbox_chan_dev *mbox_chan_dev, int major,
@@ -354,7 +333,6 @@ static void mbox_device_destroy(struct mbox_chan_dev *mbox_chan_dev, int major,
 static int mbox_create_dev_files(struct platform_device *pdev,
 				 struct mbox_client_dev *tdev)
 {
-	struct mbox_chan_dev *mbox_chan_dev;
 	struct device_node *dt_node = tdev->dev->of_node;
 	struct property *names_prop;
 	char devf_name[16];
@@ -401,14 +379,6 @@ static int mbox_create_dev_files(struct platform_device *pdev,
 	}
 
 	for (i = 0; i < num_chans; ++i) {
-
-		mbox_chan_dev = &mbox_chan_dev_ar[i];
-
-		mbox_chan_dev->tdev = tdev;
-		mbox_chan_dev->instance_idx = i;
-
-		spin_lock_init(&mbox_chan_dev->lock);
-
 		if (names_prop && mbox_name) { // name from DT node
 			fname = mbox_name;
 
@@ -434,7 +404,8 @@ static int mbox_create_dev_files(struct platform_device *pdev,
 			fname = devf_name;
 		}
 
-		rc = mbox_device_create(mbox_chan_dev, major_num, i, class, fname);
+		rc = mbox_device_create(&mbox_chan_dev_ar[i], tdev, major_num,
+					i, class, fname);
 		if (rc) {
 			dev_err(&pdev->dev, "failed to construct mailbox device\n");
 			goto fail_dev;
