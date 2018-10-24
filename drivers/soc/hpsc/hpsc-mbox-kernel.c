@@ -97,6 +97,45 @@ send_out:
 	return ret;
 }
 
+static int hpsc_mbox_verify_chan_cfg(struct mbox_client_dev *tdev)
+{
+	struct of_phandle_args spec;
+	int num_chans;
+	int i;
+	// there must be exactly 2 channels - 1 out, 1 in
+	num_chans = of_count_phandle_with_args(tdev->dev->of_node,
+					       DT_MBOXES_PROP, DT_MBOXES_CELLS);
+	if (num_chans != DT_MBOXES_COUNT) {
+		dev_err(tdev->dev, "Num instances in '%s' property != %d: %d\n",
+			DT_MBOXES_PROP, DT_MBOXES_COUNT, num_chans);
+		return -EINVAL;
+	}
+	// check channel ordering - index 0 is outbound and index 1 is inbound
+	for (i = 0; i < DT_MBOXES_COUNT; i++) {
+		if (of_parse_phandle_with_args(tdev->dev->of_node,
+					       DT_MBOXES_PROP, DT_MBOXES_CELLS,
+					       i, &spec)) {
+			dev_err(tdev->dev, "Can't parse '%s' property\n",
+				DT_MBOXES_PROP);
+			return -EINVAL;
+		}
+		of_node_put(spec.np);
+		if (i != spec.args[1]) {
+			dev_err(tdev->dev, "First '%s' entry must be outbound, second must be inbound\n",
+				DT_MBOXES_PROP);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+static void hpsc_mbox_notif_handler_init(struct hpsc_notif_handler *h)
+{
+	h->name = "HPSC Mailbox Client Kernel";
+	h->msg_sz = HPSC_MBOX_CLIENT_KERNEL_MSG_LEN;
+	h->send = hpsc_mbox_client_kernel_send;
+}
+
 static void hpsc_mbox_client_init(struct mbox_client *cl, struct device *dev)
 {
 	cl->dev = dev;
@@ -106,69 +145,53 @@ static void hpsc_mbox_client_init(struct mbox_client *cl, struct device *dev)
 	cl->knows_txdone = false;
 }
 
+static void hpsc_mbox_chan_dev_init(struct mbox_chan_dev *cdev,
+				    struct mbox_client_dev *tdev)
+{
+	cdev->tdev = tdev;
+	hpsc_mbox_client_init(&cdev->client, tdev->dev);
+	spin_lock_init(&cdev->lock);
+	cdev->channel = NULL;
+	cdev->send_ack = true;
+}
+
 static int hpsc_mbox_client_kernel_probe(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev;
 	struct mbox_chan_dev *cdev;
-	struct of_phandle_args spec;
-	int num_chans;
 	int i;
 	int ret;
 
 	dev_info(&pdev->dev, "Mailbox client kernel module: probe\n");
 
+	// create/init client device
 	tdev = devm_kzalloc(&pdev->dev, sizeof(*tdev), GFP_KERNEL);
 	if (!tdev)
 		return -ENOMEM;
 	tdev->dev = &pdev->dev;
 	platform_set_drvdata(pdev, tdev);
 
+	// verify channel configuration in device tree, create/init chan array
+	ret = hpsc_mbox_verify_chan_cfg(tdev);
+	if (ret)
+		return ret;
 	mbox_chan_dev_ar = devm_kzalloc(&pdev->dev, DT_MBOXES_COUNT * sizeof(struct mbox_chan_dev), GFP_KERNEL);
 	if (!mbox_chan_dev_ar)
 		return -ENOMEM;
+	for (i = 0; i < DT_MBOXES_COUNT; i++)
+		hpsc_mbox_chan_dev_init(&mbox_chan_dev_ar[i], tdev);
 
+	// create/init notifier handler
 	notif_h = devm_kzalloc(&pdev->dev, sizeof(*notif_h), GFP_KERNEL);
 	if (!notif_h)
 		return -ENOMEM;
-	notif_h->name = "HPSC Mailbox Client Kernel";
-	notif_h->msg_sz = HPSC_MBOX_CLIENT_KERNEL_MSG_LEN;
-	notif_h->send = hpsc_mbox_client_kernel_send;
+	hpsc_mbox_notif_handler_init(notif_h);
 
-	// there must be 2 and only 2 channels - 1 out, 1 in
-	num_chans = of_count_phandle_with_args(tdev->dev->of_node,
-					       DT_MBOXES_PROP, DT_MBOXES_CELLS);
-	if (num_chans != DT_MBOXES_COUNT) {
-		// device tree not configured properly
-		dev_err(tdev->dev, "Num instances in '%s' property != %d: %d\n",
-			DT_MBOXES_PROP, DT_MBOXES_COUNT, num_chans);
-		return -EINVAL;
-	}
-
-	// populate mbox_chan_dev_ar and open channels
+	// We must delay processing of pending messages until we've registered
+	// with notif handler, which requires all channels to be open.
+	// First, lock each channel before opening them
 	for (i = 0; i < DT_MBOXES_COUNT; i++) {
 		cdev = &mbox_chan_dev_ar[i];
-		// validate outbound and inbound mailbox ordering
-		if (of_parse_phandle_with_args(tdev->dev->of_node,
-					       DT_MBOXES_PROP, DT_MBOXES_CELLS,
-					       i, &spec)) {
-			dev_err(tdev->dev, "Can't parse '%s' property\n",
-				DT_MBOXES_PROP);
-			ret = -EINVAL;
-			goto fail_channel;
-		}
-		of_node_put(spec.np);
-		if (i != spec.args[1]) {
-			// device tree not configured properly
-			// index 0 is mbox out and index 1 is mbox in
-			dev_err(tdev->dev, "First '%s' entry must be outbound, second must be inbound\n",
-				DT_MBOXES_PROP);
-			ret = -EINVAL;
-			goto fail_channel;
-		}
-		cdev->tdev = tdev;
-		hpsc_mbox_client_init(&cdev->client, tdev->dev);
-		spin_lock_init(&cdev->lock);
-		// lock holds pending messages until we register notif handler
 		spin_lock(&cdev->lock);
 		cdev->channel = mbox_request_channel(&cdev->client, i);
 		if (IS_ERR(cdev->channel)) {
@@ -177,14 +200,14 @@ static int hpsc_mbox_client_kernel_probe(struct platform_device *pdev)
 			spin_unlock(&cdev->lock);
 			goto fail_channel;
 		}
-		cdev->send_ack = true;
 	}
-	// register with notification handler
+	// Now register with notification handler
 	ret = hpsc_notif_handler_register(notif_h);
 	BUG_ON(ret); // shouldn't fail if we setup notif_h correctly
-	// now we can release the lock to receive pending messages
+	// Finally, release the lock to start processing any pending messages
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
 		spin_unlock(&mbox_chan_dev_ar[i].lock);
+
 	dev_info(&pdev->dev, "Mailbox client kernel module registered\n");
 	return 0;
 
