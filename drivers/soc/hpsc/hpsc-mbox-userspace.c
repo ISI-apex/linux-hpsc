@@ -489,7 +489,7 @@ static int mbox_test_remove(struct platform_device *pdev)
 {
         int i;
 
-        for (i = num_chans - 1; i <= 0; --i)
+        for (i = num_chans - 1; i >= 0; --i)
                 mbox_device_destroy(&mbox_chan_dev_ar[i], major_num, i, class);
 
         class_destroy(class);
