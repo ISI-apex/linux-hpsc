@@ -11,27 +11,43 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 
-#define REG_OWNER             0x00
-#define REG_INT_ENABLE        0x04
-#define REG_INT_CAUSE         0x08
-#define REG_INT_STATUS        0x0C
-#define REG_INT_CLEAR         0x08 /* TODO: is this overlap by design */
-#define REG_INT_SET           0x0C
-#define REG_DESTINATION       0x1C
-#define REG_DATA              0x20
+#define REG_CONFIG              0x00
+#define REG_EVENT_CAUSE         0x04
+#define REG_EVENT_CLEAR         0x04
+#define REG_EVENT_STATUS        0x08
+#define REG_EVENT_SET           0x08
+#define REG_INT_ENABLE          0x0C
+#define REG_DATA                0x10
 
-#define HPSC_MBOX_INT_A 0x1 // receive interrupt
-#define HPSC_MBOX_INT_B 0x2 // ack interrupt
+#define REG_CONFIG__UNSECURE      0x1
+#define REG_CONFIG__OWNER__SHIFT  8
+#define REG_CONFIG__OWNER__MASK   0x0000ff00
+#define REG_CONFIG__SRC__SHIFT    16
+#define REG_CONFIG__SRC__MASK     0x00ff0000
+#define REG_CONFIG__DEST__SHIFT   24
+#define REG_CONFIG__DEST__MASK    0xff000000
+
+#define HPSC_MBOX_EVENT_A 0x1
+#define HPSC_MBOX_EVENT_B 0x2
+
+#define HPSC_MBOX_INT_A(idx) (1 << (2 * (idx)))      // rcv (map event A to int 'idx')
+#define HPSC_MBOX_INT_B(idx) (1 << (2 * (idx) + 1))  // ack (map event B to int 'idx')
+
 
 #define HPSC_MBOX_DATA_REGS 16
 #define HPSC_MBOX_INTS 2
 #define HPSC_MBOX_INSTANCES 32
 #define HPSC_MBOX_INSTANCE_REGION (REG_DATA + HPSC_MBOX_DATA_REGS * 4)
 
+#define DT_PROP_INTERRUPT_IDX_RCV "interrupt-idx-rcv"
+#define DT_PROP_INTERRUPT_IDX_ACK "interrupt-idx-ack"
+
 struct hpsc_mbox {
 	void __iomem *regs;
 	//spinlock_t lock; // TODO: should not be necessary, because can't access same device file from two cores
 	struct mbox_controller controller;
+        unsigned rcv_int_idx;
+        unsigned ack_int_idx;
 };
 
 struct hpsc_mbox_chan {
@@ -42,10 +58,9 @@ struct hpsc_mbox_chan {
         unsigned instance;
         bool incoming;
         unsigned owner;
+        unsigned src;
         unsigned dest;
 
-        unsigned rcv_irqnum;
-        unsigned ack_irqnum;
         unsigned int_enabled;
 };
 
@@ -54,36 +69,62 @@ static struct hpsc_mbox *hpsc_mbox_link_mbox(struct mbox_chan *link)
 	return container_of(link->mbox, struct hpsc_mbox, controller);
 }
 
-static irqreturn_t hpsc_mbox_rcv_irq(int irq, void *dev_id)
+static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox,
+			         unsigned event, unsigned interrupt)
 {
-	struct mbox_chan *link = dev_id;
-	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
-	struct hpsc_mbox_chan *chan = link->con_priv;
+	struct mbox_chan *link;
+	struct hpsc_mbox_chan *chan;
+	unsigned i;
+	u32 event_cause, int_enable;
 
-        dev_dbg(mbox->controller.dev, "rcv ISR instance %u\n", chan->instance);
+	// Check all mailbox instances; could do better if we maintain another
+	// list of actually enabled mailboxes; could do even better if HW
+	// provides disambiguation information about (instance index).
+	for (i = 0; i < mbox->controller.num_chans; ++i) {
+		link = &mbox->controller.chans[i];
+		chan = link->con_priv;
 
-        mbox_chan_received_data(link, chan->regs + REG_DATA); // TODO: can client memcpy_fromio?
+		// Are we 'signed up' for this event (A) from this mailbox (i)?
+		// Two criteria: (1) Cause (or Status) is set, and (2) Mapped to our IRQ
+		event_cause = readl(chan->regs + REG_EVENT_CAUSE);
+		if (!(event_cause & event))
+			continue;
+		int_enable = readl(chan->regs + REG_INT_ENABLE);
+		if (!(int_enable & interrupt))
+			continue;
 
-        dev_dbg(mbox->controller.dev, "clear int A\n");
-        writel(HPSC_MBOX_INT_A, chan->regs + REG_INT_CLEAR);
+		dev_dbg(mbox->controller.dev, "ISR %u instance %u\n", event, chan->instance);
 
+		// This could be resolved statically, at the cost of duplicating the
+		// disambiguation code in both ISRs or using callbacks
+		switch (event) {
+		    case HPSC_MBOX_EVENT_A:
+			mbox_chan_received_data(link, chan->regs + REG_DATA); // TODO: can client memcpy_fromio?
+			break;
+		    case HPSC_MBOX_EVENT_B:
+			mbox_chan_txdone(link, /* status = OK */ 0);
+			break;
+		}
+
+		dev_dbg(mbox->controller.dev, "clear event %u\n", event);
+		writel(event, chan->regs + REG_EVENT_CLEAR);
+	}
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t hpsc_mbox_ack_irq(int irq, void *dev_id)
+// In the following, we introduce ambiguity (which event) that then has to be
+// resolved dynamically in the common function, which is wasteful, and the only
+// reason for it is to avoid duplicating the common code; perhaps a callback
+// would be a middle ground.
+static irqreturn_t hpsc_mbox_rcv_irq(int irq, void *priv)
 {
-	struct mbox_chan *link = dev_id;
-	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
-	struct hpsc_mbox_chan *chan = link->con_priv;
-
-        dev_dbg(mbox->controller.dev, "ack ISR instance %u\n", chan->instance);
-
-        dev_dbg(mbox->controller.dev, "clear int B\n");
-        writel(HPSC_MBOX_INT_B, chan->regs + REG_INT_CLEAR);
-
-        mbox_chan_txdone(link, /* status = OK */ 0);
-
-	return IRQ_HANDLED;
+	struct hpsc_mbox *mbox = priv;
+	return hpsc_mbox_isr(mbox, HPSC_MBOX_EVENT_A, HPSC_MBOX_INT_A(mbox->rcv_int_idx));
+}
+static irqreturn_t hpsc_mbox_ack_irq(int irq, void *priv)
+{
+	struct hpsc_mbox *mbox = priv;
+	return hpsc_mbox_isr(mbox, HPSC_MBOX_EVENT_B, HPSC_MBOX_INT_B(mbox->ack_int_idx));
 }
 
 static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
@@ -102,7 +143,7 @@ static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
 	dev_dbg(mbox->controller.dev, "\n");
 
 	dev_dbg(mbox->controller.dev, "set int A\n");
-	writel(HPSC_MBOX_INT_A, chan->regs + REG_INT_SET);
+	writel(HPSC_MBOX_EVENT_A, chan->regs + REG_EVENT_SET);
 
 	//spin_unlock(&mbox->lock);
 	return 0;
@@ -121,7 +162,7 @@ static bool hpsc_mbox_peek_data(struct mbox_chan *link)
 	struct hpsc_mbox_chan *chan = link->con_priv;
 
         dev_dbg(mbox->controller.dev, "client notified of receipt: set int B\n");
-        writel(HPSC_MBOX_INT_B, chan->regs + REG_INT_SET);
+        writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
 
         return false;
 }
@@ -130,53 +171,66 @@ static int hpsc_mbox_startup(struct mbox_chan *link)
 {
 	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
 	struct hpsc_mbox_chan *chan = link->con_priv;
-        u32 val, dest;
+        u32 ie, owner, src, dest, config, config_claimed;
 
         // TODO: can this also race with ISR? race through client API?
 
 
         // Note: owner+dest is entirely orthogonal to direction.
-        // Note; owner+dest are entirely optional, may set both to zero in DT
-        // Note: owner/dest access is not enforced by HW, it can only
+        // Note; owner+src+dest are entirely optional, may set both to zero in DT
+        // Note: owner/src/dest access is not enforced by HW, it can only
         //       serve as a mild sanity check.
         if (chan->owner) {
-            dev_dbg(mbox->controller.dev, "set owner: %p <- %x\n",
-                    chan->regs + REG_OWNER, chan->owner);
-            writel(chan->owner, chan->regs + REG_OWNER);
+		config = ((chan->owner << REG_CONFIG__OWNER__SHIFT)
+				& REG_CONFIG__OWNER__MASK) |
+			((chan->src   << REG_CONFIG__SRC__SHIFT)
+				& REG_CONFIG__SRC__MASK) |
+			((chan->dest  << REG_CONFIG__DEST__SHIFT)
+				& REG_CONFIG__DEST__MASK) |
+			REG_CONFIG__UNSECURE;
+
+		dev_dbg(mbox->controller.dev, "set config: %p <- %x\n",
+			chan->regs + REG_CONFIG, config);
+		writel(config, chan->regs + REG_CONFIG);
+
+		config_claimed = readl(chan->regs + REG_CONFIG);
+		dev_dbg(mbox->controller.dev, "read config: %p <- %x\n",
+			chan->regs + REG_CONFIG, config_claimed);
+		if (config_claimed != config) {
+			dev_dbg(mbox->controller.dev,
+				"failed to claim mbox: config %x != %x\n",
+				config, config_claimed);
+			return -EBUSY;
+		}
         }
 
-        if (chan->dest) {
-                if (chan->owner) { // we are onwer, so set destination
-                    dev_dbg(mbox->controller.dev, "write dest: %p <- %x\n",
-                            chan->regs + REG_DESTINATION, chan->dest);
-                    writel(chan->dest, chan->regs + REG_DESTINATION);
-                } else { // we are not the owner, only check
-                    dest = readl(chan->regs + REG_DESTINATION);
-                    dev_dbg(mbox->controller.dev, "read dest: %p -> %x\n",
-                            chan->regs + REG_DESTINATION, dest);
-                    if (chan->dest != dest) {
-                        dev_err(mbox->controller.dev,
-                                "destination mismatch: %x (expected %x)\n",
-                                dest, chan->dest);
-                        return -EBUSY;
-                    }
-                }
+        if (chan->dest) { // regardless of whether we're owner or not, check
+		config = readl(chan->regs + REG_CONFIG);
+		dev_dbg(mbox->controller.dev, "read config: %p <- %x\n",
+			chan->regs + REG_CONFIG, config);
+
+		owner = (config & REG_CONFIG__OWNER__MASK) >> REG_CONFIG__OWNER__SHIFT;
+		src   = (config & REG_CONFIG__SRC__MASK)   >> REG_CONFIG__SRC__SHIFT;
+		dest  = (config & REG_CONFIG__DEST__MASK)  >> REG_CONFIG__DEST__SHIFT;
+
+		if ((chan->incoming  && chan->dest && dest != chan->dest) ||
+		    (!chan->incoming && chan->src && src != chan->src)) {
+			dev_err(mbox->controller.dev,
+				"src/dest mismatch: %x/%x (expected %x/%x)\n",
+				src, dest, chan->src, chan->dest);
+			return -EBUSY;
+		}
         }
 
-        if (chan->incoming) {
-            enable_irq(chan->rcv_irqnum);
-
-	    dev_dbg(mbox->controller.dev, "enable int A (rcv)\n");
-            val = readl(chan->regs + REG_INT_ENABLE);
-            writel(val | HPSC_MBOX_INT_A, chan->regs + REG_INT_ENABLE);
-
-        } else { // TX
-            enable_irq(chan->ack_irqnum);
-
-	    dev_dbg(mbox->controller.dev, "enable int B (ack)\n");
-            val = readl(chan->regs + REG_INT_ENABLE);
-            writel(val | HPSC_MBOX_INT_B, chan->regs + REG_INT_ENABLE);
-        }
+	ie = readl(chan->regs + REG_INT_ENABLE);
+	if (chan->incoming) {
+		ie |= HPSC_MBOX_INT_A(mbox->rcv_int_idx);
+	} else { // TX
+		ie |= HPSC_MBOX_INT_B(mbox->ack_int_idx);
+	}
+	dev_dbg(mbox->controller.dev, "instance %u int_enable <- %08x (rcv)\n",
+			chan->instance, ie);
+	writel(ie, chan->regs + REG_INT_ENABLE);
 
 	return 0;
 }
@@ -188,25 +242,21 @@ static void hpsc_mbox_shutdown(struct mbox_chan *link)
 
         // TODO: race with ISR. Also, cace through client API?
 
-        u32 ie = readl(chan->regs + REG_INT_ENABLE);
-
-        if (chan->incoming) {
-	    dev_dbg(mbox->controller.dev, "disable int A (rcv)\n");
-            writel(ie & ~HPSC_MBOX_INT_A, chan->regs + REG_INT_ENABLE);
-
-            disable_irq(chan->rcv_irqnum);
-
-        } else { // TX
-	    dev_dbg(mbox->controller.dev, "disable int B (ack)\n");
-            writel(ie & ~HPSC_MBOX_INT_B, chan->regs + REG_INT_ENABLE);
-
-            disable_irq(chan->ack_irqnum);
-        }
+	// Could just rely on HW reset-on-release behavior, but for symmetry...
+	u32 ie = readl(chan->regs + REG_INT_ENABLE);
+	if (chan->incoming) {
+		ie &= ~HPSC_MBOX_INT_A(mbox->rcv_int_idx);
+	} else { // TX
+		ie &= ~HPSC_MBOX_INT_B(mbox->ack_int_idx);
+	}
+	dev_dbg(mbox->controller.dev, "instance %u int_enable <- %08x (rcv)\n",
+			chan->instance, ie);
+	writel(ie, chan->regs + REG_INT_ENABLE);
 
         if (chan->owner) {
-                dev_dbg(mbox->controller.dev, "clear owner: %p <- 0\n",
-                        chan->regs + REG_OWNER);
-                writel(0, chan->regs + REG_OWNER);
+                dev_dbg(mbox->controller.dev, "clear config: %p <- 0\n",
+                        chan->regs + REG_CONFIG);
+                writel(0, chan->regs + REG_CONFIG);
 
                 // clearing owner also clears dest (resets the instance)
         }
@@ -226,7 +276,7 @@ static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
        struct mbox_chan *link;
        struct hpsc_mbox_chan *chan;
 
-       if (sp->args_count != 4) {
+       if (sp->args_count != 5) {
 	       dev_err(mbox->dev, "invalid mailbox instance reference in DT node\n");
                return NULL;
         }
@@ -237,7 +287,8 @@ static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
        chan = (struct hpsc_mbox_chan *)link->con_priv;
        chan->incoming = sp->args[1];
        chan->owner = sp->args[2];
-       chan->dest = sp->args[3];
+       chan->src = sp->args[3];
+       chan->dest = sp->args[4];
 
        return link;
 }
@@ -249,20 +300,15 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
 	struct resource *iomem;
 	struct hpsc_mbox *mbox;
         struct hpsc_mbox_chan *con_priv, *chan;
+	unsigned rcv_irqnum, ack_irqnum;
         unsigned i;
+
 
 	mbox = devm_kzalloc(dev, sizeof(*mbox), GFP_KERNEL);
 	if (mbox == NULL)
 		return -ENOMEM;
-	//spin_lock_init(&mbox->lock);
 
-	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	mbox->regs = devm_ioremap_resource(&pdev->dev, iomem);
-	if (IS_ERR(mbox->regs)) {
-		ret = PTR_ERR(mbox->regs);
-		dev_err(&pdev->dev, "Failed to remap mailbox regs: %d\n", ret);
-		return ret;
-	}
+	//spin_lock_init(&mbox->lock);
 
 	mbox->controller.txdone_irq = true;
 	mbox->controller.ops = &hpsc_mbox_chan_ops;
@@ -272,6 +318,7 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
 	mbox->controller.chans = devm_kzalloc(dev,
 		sizeof(*mbox->controller.chans) * HPSC_MBOX_INSTANCES, GFP_KERNEL);
 	if (!mbox->controller.chans)
+                // TODO: free mbox?
 		return -ENOMEM;
 
         // Allocate space for private state as a contiguous array, to reduce overhead.
@@ -279,31 +326,71 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
         con_priv = devm_kzalloc(dev,
                     sizeof(struct hpsc_mbox_chan) * mbox->controller.num_chans, GFP_KERNEL);
         if (!con_priv)
+                // TODO: free mbox?
+                // TODO: free chans?
                 return -ENOMEM;
+
+
+        // Map all instances onto one pair of IRQs
+        //
+        // NOTE: So, do not expose the irq mapping as configurable. That would
+        // be advanced functionality, only necessary if user desires to have
+        // multiple *groups* of mailboxes mapped to different IRQ pairs in
+        // order to achieve more isolation and to set interrupt priorities.
+
+	if (of_property_read_u32(dev->of_node, DT_PROP_INTERRUPT_IDX_RCV,
+			         &mbox->rcv_int_idx)) {
+		dev_warn(dev, "%s: failed to read '%s' property\n",
+			 __func__, DT_PROP_INTERRUPT_IDX_RCV);
+		// TODO: free mbox?
+		return -EINVAL;
+	}
+	if (of_property_read_u32(dev->of_node, DT_PROP_INTERRUPT_IDX_ACK,
+			         &mbox->ack_int_idx)) {
+		dev_warn(dev, "%s: failed to read '%s' property\n",
+			 __func__, DT_PROP_INTERRUPT_IDX_ACK);
+		// TODO: free mbox?
+		return -EINVAL;
+	}
+
+        rcv_irqnum = irq_of_parse_and_map(dev->of_node, mbox->rcv_int_idx);
+	// TODO: failure code?
+        ack_irqnum = irq_of_parse_and_map(dev->of_node, mbox->ack_int_idx);
+	// TODO: failure code?
+        dev_info(dev, "hpsc_mbox_probe: rcv irq %u ack irq %u\n",
+	         rcv_irqnum, ack_irqnum);
+
+        ret = devm_request_irq(dev, rcv_irqnum, hpsc_mbox_rcv_irq,
+			       /* flags */ 0, dev_name(dev), mbox);
+        if (ret) {
+                dev_err(dev, "Failed to register mailbox rcv IRQ handler: %d\n",
+                        ret);
+                // TODO: free?
+                return -ENODEV;
+        }
+
+        ret = devm_request_irq(dev, ack_irqnum, hpsc_mbox_ack_irq,
+			       /* flags */ 0, dev_name(dev), mbox);
+        if (ret) {
+                dev_err(dev, "Failed to register mailbox ack IRQ handler: %d\n",
+                        ret);
+                // TODO: free?
+                // TODO: release rcv irq?
+                return -ENODEV;
+        }
+
+	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	mbox->regs = devm_ioremap_resource(&pdev->dev, iomem);
+	if (IS_ERR(mbox->regs)) {
+                // TODO: free?
+                // TODO: release irqs?
+		ret = PTR_ERR(mbox->regs);
+		dev_err(&pdev->dev, "Failed to remap mailbox regs: %d\n", ret);
+		return ret;
+	}
+
         for (i = 0; i < mbox->controller.num_chans; ++i) {
                 chan = &con_priv[i];
-
-                chan->rcv_irqnum = irq_of_parse_and_map(dev->of_node, 2 * i);
-                dev_info(dev, "hpsc_mbox_probe: rcv irq %u\n", chan->rcv_irqnum);
-                ret = devm_request_irq(dev, chan->rcv_irqnum,
-                                       hpsc_mbox_rcv_irq, 0, dev_name(dev), &mbox->controller.chans[i]);
-                disable_irq(chan->rcv_irqnum); // TODO: is there a way to request in disable state?
-                if (ret) {
-                        dev_err(dev, "Failed to register mailbox rcv IRQ handler: %d\n",
-                                ret);
-                        return -ENODEV;
-                }
-
-                chan->ack_irqnum = irq_of_parse_and_map(dev->of_node, 2 * i + 1);
-                dev_info(dev, "hpsc_mbox_probe: ack irq %u\n", chan->ack_irqnum);
-                ret = devm_request_irq(dev, chan->ack_irqnum,
-                                       hpsc_mbox_ack_irq, 0, dev_name(dev), &mbox->controller.chans[i]);
-                disable_irq(chan->ack_irqnum); // TODO: is there a way to request in disable state?
-                if (ret) {
-                        dev_err(dev, "Failed to register mailbox ack IRQ handler: %d\n",
-                                ret);
-                        return -ENODEV;
-                }
 
                 chan->mbox = mbox;
                 chan->instance = i;
@@ -313,6 +400,8 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
 
 	ret = mbox_controller_register(&mbox->controller);
 	if (ret)
+                // TODO: free?
+                // TODO: release irqs?
 		return ret;
 
 	platform_set_drvdata(pdev, mbox);
