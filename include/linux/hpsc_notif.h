@@ -15,7 +15,7 @@
 #define HPSC_NOTIF_MSG_SIZE 64
 
 // Message type enumeration
-typedef enum hpsc_notif_type {
+enum hpsc_notif_type {
 	// Value 0 is reserved so empty messages can be recognized
 	HPSC_NOTIF_INVALID = 0,
 	// responses - payload contains ID of the response being acknowledged
@@ -35,7 +35,7 @@ typedef enum hpsc_notif_type {
 	ACTION,
 	// enum counter
 	HPSC_NOTIF_TYPE_COUNT
-} hpsc_notif_type;
+};
 
 /**
  * Handlers are registered by modules that can exchange messages.
