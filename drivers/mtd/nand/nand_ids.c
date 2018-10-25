@@ -11,17 +11,11 @@
 #include <linux/sizes.h>
 
 #define HPSC
-#define HPSC_TEST
 #define LP_OPTIONS NAND_SAMSUNG_LP_OPTIONS
 #define LP_OPTIONS16 (LP_OPTIONS | NAND_BUSWIDTH_16)
 
-#ifdef __HPSC_TEST	/* DK tries to skip bad block scan during initialization */
-#define SP_OPTIONS NAND_NEED_READRDY | NAND_SKIP_BBTSCAN
-#define SP_OPTIONS16 (SP_OPTIONS | NAND_BUSWIDTH_16)
-#else
 #define SP_OPTIONS NAND_NEED_READRDY
 #define SP_OPTIONS16 (SP_OPTIONS | NAND_BUSWIDTH_16)
-#endif
 
 /*
  * The chip ID list:
