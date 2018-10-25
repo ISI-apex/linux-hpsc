@@ -48,6 +48,8 @@ struct hpsc_mbox {
 	struct mbox_controller controller;
         unsigned rcv_int_idx;
         unsigned ack_int_idx;
+        unsigned rcv_irqnum;
+        unsigned ack_irqnum;
 };
 
 struct hpsc_mbox_chan {
@@ -300,7 +302,6 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
 	struct resource *iomem;
 	struct hpsc_mbox *mbox;
         struct hpsc_mbox_chan *con_priv, *chan;
-	unsigned rcv_irqnum, ack_irqnum;
         unsigned i;
 
 
@@ -318,7 +319,6 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
 	mbox->controller.chans = devm_kzalloc(dev,
 		sizeof(*mbox->controller.chans) * HPSC_MBOX_INSTANCES, GFP_KERNEL);
 	if (!mbox->controller.chans)
-                // TODO: free mbox?
 		return -ENOMEM;
 
         // Allocate space for private state as a contiguous array, to reduce overhead.
@@ -326,8 +326,6 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
         con_priv = devm_kzalloc(dev,
                     sizeof(struct hpsc_mbox_chan) * mbox->controller.num_chans, GFP_KERNEL);
         if (!con_priv)
-                // TODO: free mbox?
-                // TODO: free chans?
                 return -ENOMEM;
 
 
@@ -340,53 +338,53 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
 
 	if (of_property_read_u32(dev->of_node, DT_PROP_INTERRUPT_IDX_RCV,
 			         &mbox->rcv_int_idx)) {
-		dev_warn(dev, "%s: failed to read '%s' property\n",
-			 __func__, DT_PROP_INTERRUPT_IDX_RCV);
-		// TODO: free mbox?
+		dev_err(dev, "%s: failed to read '%s' property\n", __func__,
+			DT_PROP_INTERRUPT_IDX_RCV);
 		return -EINVAL;
 	}
 	if (of_property_read_u32(dev->of_node, DT_PROP_INTERRUPT_IDX_ACK,
 			         &mbox->ack_int_idx)) {
-		dev_warn(dev, "%s: failed to read '%s' property\n",
-			 __func__, DT_PROP_INTERRUPT_IDX_ACK);
-		// TODO: free mbox?
+		dev_err(dev, "%s: failed to read '%s' property\n", __func__,
+			DT_PROP_INTERRUPT_IDX_ACK);
 		return -EINVAL;
 	}
 
-        rcv_irqnum = irq_of_parse_and_map(dev->of_node, mbox->rcv_int_idx);
-	// TODO: failure code?
-        ack_irqnum = irq_of_parse_and_map(dev->of_node, mbox->ack_int_idx);
-	// TODO: failure code?
-        dev_info(dev, "hpsc_mbox_probe: rcv irq %u ack irq %u\n",
-	         rcv_irqnum, ack_irqnum);
+	mbox->rcv_irqnum = irq_of_parse_and_map(dev->of_node, mbox->rcv_int_idx);
+	if (!mbox->rcv_irqnum) {
+		dev_err(dev, "Failed to parse/map rcv irq");
+		return -EINVAL;
+	}
+	mbox->ack_irqnum = irq_of_parse_and_map(dev->of_node, mbox->ack_int_idx);
+	if (!mbox->ack_irqnum) {
+		dev_err(dev, "Failed to parse/map ack irq\n");
+		return -EINVAL;
+	}
+	dev_info(dev, "hpsc_mbox_probe: rcv irq %u ack irq %u\n",
+		 mbox->rcv_irqnum, mbox->ack_irqnum);
 
-        ret = devm_request_irq(dev, rcv_irqnum, hpsc_mbox_rcv_irq,
+        ret = devm_request_irq(dev, mbox->rcv_irqnum, hpsc_mbox_rcv_irq,
 			       /* flags */ 0, dev_name(dev), mbox);
         if (ret) {
                 dev_err(dev, "Failed to register mailbox rcv IRQ handler: %d\n",
                         ret);
-                // TODO: free?
                 return -ENODEV;
         }
 
-        ret = devm_request_irq(dev, ack_irqnum, hpsc_mbox_ack_irq,
+        ret = devm_request_irq(dev, mbox->ack_irqnum, hpsc_mbox_ack_irq,
 			       /* flags */ 0, dev_name(dev), mbox);
         if (ret) {
                 dev_err(dev, "Failed to register mailbox ack IRQ handler: %d\n",
                         ret);
-                // TODO: free?
-                // TODO: release rcv irq?
-                return -ENODEV;
+		ret = -ENODEV;
+		goto fail_ack_irq;
         }
 
 	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	mbox->regs = devm_ioremap_resource(&pdev->dev, iomem);
 	if (IS_ERR(mbox->regs)) {
-                // TODO: free?
-                // TODO: release irqs?
 		ret = PTR_ERR(mbox->regs);
 		dev_err(&pdev->dev, "Failed to remap mailbox regs: %d\n", ret);
-		return ret;
+		goto fail_ioremap;
 	}
 
         for (i = 0; i < mbox->controller.num_chans; ++i) {
@@ -399,15 +397,21 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
         }
 
 	ret = mbox_controller_register(&mbox->controller);
-	if (ret)
-                // TODO: free?
-                // TODO: release irqs?
-		return ret;
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to register controller: %d\n", ret);
+		goto fail_ioremap;
+	}
 
 	platform_set_drvdata(pdev, mbox);
 	dev_info(dev, "mailbox enabled\n");
 	dev_dbg(dev, "mailbox dynamic debug enabled\n");
 
+	return ret;
+
+fail_ioremap:
+	devm_free_irq(dev, mbox->ack_irqnum, mbox);
+fail_ack_irq:
+	devm_free_irq(dev, mbox->rcv_irqnum, mbox);
 	return ret;
 }
 
@@ -415,6 +419,8 @@ static int hpsc_mbox_remove(struct platform_device *pdev)
 {
 	struct hpsc_mbox *mbox = platform_get_drvdata(pdev);
 	mbox_controller_unregister(&mbox->controller);
+	devm_free_irq(&pdev->dev, mbox->ack_irqnum, mbox);
+	devm_free_irq(&pdev->dev, mbox->rcv_irqnum, mbox);
 	return 0;
 }
 
