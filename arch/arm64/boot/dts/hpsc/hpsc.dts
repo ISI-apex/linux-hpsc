@@ -1,6 +1,7 @@
 /dts-v1/;
 
 #include <dt-bindings/phy/phy.h>
+#include "mailbox-map.h" /* same file also present in other subsystems */
 
 #define MASTER_ID_TRCH_CPU  0x2d
 
@@ -380,10 +381,9 @@
                                      <0 148 4>, <0 149 4>, <0 150 4>, <0 151 4>;
 
 			/* Map all instances onto one pair of IRQs,
-			 * this pair must be not be used by TRCH, RTPS (see
-			 * mailbox-map.h in TRCH/RTPS code) */
-			interrupt-idx-rcv = /* MBOX_HPPS_HPPS_RCV_INT */ <4>;
-			interrupt-idx-ack = /* MBOX_HPPS_HPPS_ACK_INT */ <5>;
+			 * this pair must be not be used by other subsystems */
+			interrupt-idx-rcv = <MBOX_HPPS_HPPS_RCV_INT>;
+			interrupt-idx-ack = <MBOX_HPPS_HPPS_ACK_INT>;
 
 			#mbox-cells = <5>;
                         /* instance index,
@@ -397,12 +397,12 @@
 		mailbox_client {
 			compatible = "mailbox-client-userspace";
 			mboxes =  /* ip block, intance index, dir, owner, dest */
-				    <&hpps_mailbox  0  0  0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&hpps_mailbox  1  1  0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
-				    <&hpps_mailbox  2  0  0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&hpps_mailbox  3  1  0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
-				    <&hpps_mailbox  4  0  MASTER_ID_HPPS_CPU0  MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&hpps_mailbox  5  1  MASTER_ID_HPPS_CPU0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
+				    <&hpps_mailbox  MBOX_HPPS_HPPS_TRCH     0  0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
+				    <&hpps_mailbox  MBOX_HPPS_TRCH_HPPS     1  0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
+				    <&hpps_mailbox  MBOX_HPPS_HPPS_RTPS     0  0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
+				    <&hpps_mailbox  MBOX_HPPS_RTPS_HPPS     1  0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
+				    <&hpps_mailbox  MBOX_HPPS_HPPS_OWN_TRCH 0  MASTER_ID_HPPS_CPU0  MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
+				    <&hpps_mailbox  MBOX_HPPS_TRCH_HPPS_OWN 1  MASTER_ID_HPPS_CPU0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
                         /* NOTE: destination is just an identifier, mboxes accessible from any core */
                         /* names optional, if not given, dev files named 'mbox%u' by index */
 			mbox-names = "mbox_trch_out",
