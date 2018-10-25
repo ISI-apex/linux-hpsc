@@ -29,8 +29,6 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#define pr_debug printk
-
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -3128,7 +3126,6 @@ erase_exit:
  */
 static void nand_sync(struct mtd_info *mtd)
 {
-	pr_debug("%s: called\n", __func__);
 
 	/* Grab the lock and see if the device is available */
 	nand_get_device(mtd, FL_SYNCING);
@@ -3324,7 +3321,6 @@ static void nand_set_defaults(struct nand_chip *chip)
 {
 	unsigned int busw = chip->options & NAND_BUSWIDTH_16;
 
-printk("%s: start\n", __func__);
 	/* check for proper chip_delay setup, set 20us if not */
 	if (!chip->chip_delay)
 		chip->chip_delay = 20;
@@ -3371,7 +3367,6 @@ printk("%s: start\n", __func__);
 
 	if (!chip->buf_align)
 		chip->buf_align = 1;
-printk("%s: end\n", __func__);
 }
 
 /* Sanitize ONFI strings so we can safely print them */
@@ -3889,7 +3884,6 @@ static int nand_detect(struct nand_chip *chip, struct nand_flash_dev *type)
 	u8 *id_data = chip->id.data;
 	u8 maf_id, dev_id;
 
-printk("%s: select_chip: \n", __func__);
 	/* Select the device */
 	chip->select_chip(mtd, 0);
 
@@ -3902,20 +3896,15 @@ printk("%s: select_chip: \n", __func__);
 	/* Select the device */
 	chip->select_chip(mtd, 0);
 
-printk("%s: NAND_CMD_RESET(0x%x) \n", __func__, NAND_CMD_RESET);
 	chip->cmdfunc(mtd, NAND_CMD_RESET, -1, -1);
 
-printk("%s: NAND_CMD_READID(0x%x) \n", __func__, NAND_CMD_READID);
 	/* Send the command for reading device ID */
 	chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
 
 	/* Read manufacturer and device IDs */
-printk("%s: maf_id = read_byte\n", __func__);
 	maf_id = chip->read_byte(mtd);
-printk("%s: dev_id = read_byte\n", __func__);
 	dev_id = chip->read_byte(mtd);
 
-printk("%s: maf_id = %d, dev_id = %d\n", __func__, *maf_id, *dev_id);
 	/*
 	 * Try again to make sure, as some systems the bus-hold or other
 	 * interface concerns can cause random data which looks like a
@@ -3941,7 +3930,6 @@ printk("%s: maf_id = %d, dev_id = %d\n", __func__, *maf_id, *dev_id);
 	manufacturer = nand_get_manufacturer(maf_id);
 	chip->manufacturer.desc = manufacturer;
 
-printk("%s: type = (%p)\n", __func__, type);
 	if (!type)
 		type = nand_flash_ids;
 
@@ -3961,7 +3949,6 @@ printk("%s: type = (%p)\n", __func__, type);
 	chip->options &= ~NAND_BUSWIDTH_16;
 
 	for (; type->name != NULL; type++) {
-printk("%s: type->name  (%s), type->dev_id(%d)\n", __func__, type->name, type->dev_id);
 		if (is_full_id_nand(type)) {
 			if (find_full_id_nand(chip, type))
 				goto ident_done;
@@ -3981,7 +3968,6 @@ printk("%s: type->name  (%s), type->dev_id(%d)\n", __func__, type->name, type->d
 			goto ident_done;
 	}
 
-printk("%s: type->name  (%p), \n", __func__, type->name);
 	if (!type->name)
 		return -ENODEV;
 
@@ -3989,7 +3975,6 @@ printk("%s: type->name  (%p), \n", __func__, type->name);
 		mtd->name = type->name;
 
 	chip->chipsize = (uint64_t)type->chipsize << 20;
-printk("%s: chip->chipsize (0x%x), \n", __func__, chip->chipsize);
 
 	if (!type->pagesize)
 		nand_manufacturer_detect(chip);
@@ -4220,13 +4205,9 @@ int nand_scan_ident(struct mtd_info *mtd, int maxchips,
 	struct nand_chip *chip = mtd_to_nand(mtd);
 	int ret;
 
-printk("%s: start\n", __func__);
 	ret = nand_dt_init(chip);
-printk("%s: after nand_dt_init\n", __func__);
 	if (ret)
 		return ret;
-	printk("%s: mtd->name (%s), mtd->dev = %p\n", __func__, (mtd->name != NULL ? mtd->name : "NULL"), &mtd->dev);
-	printk("%s: mtd->name (%s), mtd->dev.init_name = (%s)\n", __func__, (mtd->name != NULL ? mtd->name : "NULL"), (mtd->dev.init_name != NULL ? mtd->dev.init_name : "NULL"));
 	if (!mtd->name && mtd->dev.parent)
 		mtd->name = dev_name(mtd->dev.parent);
 
@@ -4239,11 +4220,9 @@ printk("%s: after nand_dt_init\n", __func__);
 		pr_err("chip.cmd_ctrl() callback is not provided");
 		return -EINVAL;
 	}
-printk("%s: call nand_set_defaults\n", __func__);
 	/* Set the default functions */
 	nand_set_defaults(chip);
 
-printk("%s: call nand_get_flash_type\n", __func__);
 	/* Read the flash type */
 	ret = nand_detect(chip, table);
 	if (ret) {
@@ -4752,10 +4731,8 @@ int nand_scan_tail(struct mtd_info *mtd)
 	 * selected and we have 256 byte pagesize fallback to software ECC
 	 */
 
-printk("%s: mtd->oobsize = %d, ecc->mode = %d\n", __func__, mtd->oobsize, ecc->mode);
 	switch (ecc->mode) {
 	case NAND_ECC_HW_OOB_FIRST:
-printk("%s: NAND_ECC_HW_OOB_FIRST\n", __func__);
 		/* Similar to NAND_ECC_HW, but a separate read_page handle */
 		if (!ecc->calculate || !ecc->correct || !ecc->hwctl) {
 			WARN(1, "No ECC functions supplied; hardware ECC not possible\n");
@@ -4766,7 +4743,6 @@ printk("%s: NAND_ECC_HW_OOB_FIRST\n", __func__);
 			ecc->read_page = nand_read_page_hwecc_oob_first;
 
 	case NAND_ECC_HW:
-printk("%s: NAND_ECC_HW\n", __func__);
 		/* Use standard hwecc read page function? */
 		if (!ecc->read_page)
 			ecc->read_page = nand_read_page_hwecc;
@@ -4786,7 +4762,6 @@ printk("%s: NAND_ECC_HW\n", __func__);
 			ecc->write_subpage = nand_write_subpage_hwecc;
 
 	case NAND_ECC_HW_SYNDROME:
-printk("%s: NAND_ECC_HW_SYNDROME\n", __func__);
 		if ((!ecc->calculate || !ecc->correct || !ecc->hwctl) &&
 		    (!ecc->read_page ||
 		     ecc->read_page == nand_read_page_hwecc ||
@@ -4844,7 +4819,6 @@ printk("%s: NAND_ECC_HW_SYNDROME\n", __func__);
 		break;
 
 	case NAND_ECC_NONE:
-		printk("%s: NAND_ECC_NONE\n", __func__);
 		pr_warn("NAND_ECC_NONE selected by board driver. This is not recommended!\n");
 		ecc->read_page = nand_read_page_raw;
 		ecc->write_page = nand_write_page_raw;

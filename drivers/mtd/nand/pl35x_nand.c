@@ -396,12 +396,6 @@ static int pl35x_nand_read_oob(struct mtd_info *mtd, struct nand_chip *chip,
 	p = chip->oob_poi;
 	chip->read_buf(mtd, p,
 			(mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH));
-#ifdef HPSC_DEBUG
-printk("%s: first 4 words of OOB\n", __func__, page);
-int i;
-for(i = 0; i < 16; i++) printk("0x%02x ", p[i]);
-printk("\n");
-#endif
 	p += (mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH);
 
 	data_phase_addr = (unsigned long __force)chip->IO_ADDR_R;
@@ -445,16 +439,6 @@ static int pl35x_nand_write_oob(struct mtd_info *mtd, struct nand_chip *chip,
 	data_phase_addr += nand_offset;
 	chip->IO_ADDR_W = (void __iomem * __force)data_phase_addr;
 	chip->write_buf(mtd, buf, PL35X_NAND_LAST_TRANSFER_LENGTH);
-#ifdef HPSC
-printk("%s: oob is -- ", __func__);
-int i;
-for(i = 0; i < mtd->oobsize; i++) {
-  uint8_t *tbuf = chip->oob_poi; 
-  printk("%02x ", tbuf[i]);
-}
-printk("\n");
-#endif
-//printk("%s: call chip->cmdfunc(mtd, NAND_CMD_PAGEPROG(0x%02x), -1, -1)\n", __func__, NAND_CMD_PAGEPROG);
 
 	/* Send command to program the OOB data */
 	chip->cmdfunc(mtd, NAND_CMD_PAGEPROG, -1, -1);
@@ -682,14 +666,6 @@ static int pl35x_nand_read_page_hwecc(struct mtd_info *mtd,
 		p += eccsize;
 	}
 	chip->read_buf(mtd, p, (eccsize - PL35X_NAND_LAST_TRANSFER_LENGTH));
-#ifdef HPSC_DEBUG
-printk("%s: chip->read_buf: %d bytes", __func__, (eccsize - PL35X_NAND_LAST_TRANSFER_LENGTH));
-for(i = 0; i < (eccsize - PL35X_NAND_LAST_TRANSFER_LENGTH); i++) {
-   if (i % 16 == 0) printk("\n0x%05x: ", i);
-   printk("0x%02x ", p[i]);
-}
-printk("\n");
-#endif
 	p += (eccsize - PL35X_NAND_LAST_TRANSFER_LENGTH);
 
 	/* Set ECC Last bit to 1 */
@@ -700,19 +676,9 @@ printk("\n");
 	chip->IO_ADDR_R = (void __iomem * __force)data_phase_addr;
 	chip->read_buf(mtd, p, PL35X_NAND_LAST_TRANSFER_LENGTH);
 
-#ifdef HPSC_DEBUG
-printk("%s: chip->read_buf: %d bytes", __func__, (PL35X_NAND_LAST_TRANSFER_LENGTH));
-for(i = 0; i < (PL35X_NAND_LAST_TRANSFER_LENGTH); i++) {
-   if (i % 16 == 0) printk("\n0x%05x: ", i);
-   printk("0x%02x ", p[i]);
-}
-printk("\n");
-#endif
 	/* Read the calculated ECC value */
 	p = buf;
-//printk("%s: call chip->ecc.calculate\n", __func__);
 	chip->ecc.calculate(mtd, p, &ecc_calc[0]);
-//printk("%s: Done read the calculated ECC value 0x%x, 0x%x, 0x%x, 0x%x\n", __func__, ecc_calc[0], ecc_calc[1],ecc_calc[2],ecc_calc[3]);
 
 	/* Clear ECC last bit */
 	data_phase_addr = (unsigned long __force)chip->IO_ADDR_R;
@@ -723,16 +689,9 @@ printk("\n");
 
 	/* Read the stored ECC value */
 	oob_ptr = chip->oob_poi;
-//printk("%s: Start reading the stored ECC value from addr(%p), size(mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH = 0x%x)\n", __func__, chip->IO_ADDR_R, mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH);
 	chip->read_buf(mtd, oob_ptr,
 			(mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH));
 
-#ifdef HPSC_DEBUG
-for (i = 0; i < mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH; i++) 
-   if (i % 16 == 0) printk("\n0x%05x: ", i);
-   printk("0x%02x ", oob_ptr[i]);
-printk("\n");
-#endif
 	/* de-assert chip select */
 	data_phase_addr = (unsigned long __force)chip->IO_ADDR_R;
 	data_phase_addr -= nand_offset;
@@ -741,7 +700,6 @@ printk("\n");
 	chip->IO_ADDR_R = (void __iomem * __force)data_phase_addr;
 
 	oob_ptr += (mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH);
-//printk("%s: oob_ptr = mtd->oobsize(%d) - PL35X_NAND_LAST_TRANSFER_LENGTH(%d) \n", __func__, mtd->oobsize, PL35X_NAND_LAST_TRANSFER_LENGTH);
 	chip->read_buf(mtd, oob_ptr, PL35X_NAND_LAST_TRANSFER_LENGTH);
 
 	ret = mtd_ooblayout_get_eccbytes(mtd, ecc_code, chip->oob_poi, 0,
@@ -749,22 +707,11 @@ printk("\n");
 	if (ret)
 		return ret;
 
-#ifdef HPSC_DEBUG
-printk("ecc in oob: ");
-for (i = 0; i < chip->ecc.total; i++)
-printk("0x%02x ", ecc_code[i]);
-printk("\n");
-printk("ecc calc : ");
-for (i = 0; i < chip->ecc.total; i++)
-printk("0x%02x ", ecc_calc[i]);
-printk("\n");
-#endif
 	eccsteps = chip->ecc.steps;
 	p = buf;
 
 	/* Check ECC error for all blocks and correct if it is correctable */
 	for (i = 0 ; eccsteps; eccsteps--, i += eccbytes, p += eccsize) {
-//printk("%s: Start chip->ecc.correct\n", __func__);
 		stat = chip->ecc.correct(mtd, p, &ecc_code[i], &ecc_calc[i]);
 		if (stat < 0)
 			mtd->ecc_stats.failed++;
