@@ -31,6 +31,7 @@
 #include <linux/slab.h>
 
 #define PL35X_NAND_DRIVER_NAME "pl35x-nand"
+#define HPSC
 
 /* NAND flash driver defines */
 #define PL35X_NAND_CMD_PHASE	1	/* End command valid in command phase */
@@ -92,8 +93,8 @@ struct pl35x_nand_command_format {
 struct pl35x_nand_info {
 	struct nand_chip chip;
 	void __iomem *nand_base;
-	unsigned long end_cmd_pending;
-	unsigned long end_cmd;
+	unsigned int end_cmd_pending;
+	unsigned int end_cmd;
 	u8 row_addr_cycles;
 	u8 col_addr_cycles;
 };
@@ -351,6 +352,7 @@ static int pl35x_nand_correct_data(struct mtd_info *mtd, unsigned char *buf,
 	ecc_odd = read_ecc_lower ^ calc_ecc_lower;
 	ecc_even = read_ecc_upper ^ calc_ecc_upper;
 
+
 	if ((ecc_odd == 0) && (ecc_even == 0))
 		return 0;       /* no error */
 
@@ -367,6 +369,7 @@ static int pl35x_nand_correct_data(struct mtd_info *mtd, unsigned char *buf,
 	if (onehot(ecc_odd | ecc_even) == 1)
 		return 1; /* one error in parity */
 
+	printk("%s: uncorrectable error\n", __func__);
 	return -1; /* Uncorrectable error */
 }
 
@@ -393,6 +396,12 @@ static int pl35x_nand_read_oob(struct mtd_info *mtd, struct nand_chip *chip,
 	p = chip->oob_poi;
 	chip->read_buf(mtd, p,
 			(mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH));
+#ifdef HPSC_DEBUG
+printk("%s: first 4 words of OOB\n", __func__, page);
+int i;
+for(i = 0; i < 16; i++) printk("0x%02x ", p[i]);
+printk("\n");
+#endif
 	p += (mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH);
 
 	data_phase_addr = (unsigned long __force)chip->IO_ADDR_R;
@@ -436,6 +445,16 @@ static int pl35x_nand_write_oob(struct mtd_info *mtd, struct nand_chip *chip,
 	data_phase_addr += nand_offset;
 	chip->IO_ADDR_W = (void __iomem * __force)data_phase_addr;
 	chip->write_buf(mtd, buf, PL35X_NAND_LAST_TRANSFER_LENGTH);
+#ifdef HPSC
+printk("%s: oob is -- ", __func__);
+int i;
+for(i = 0; i < mtd->oobsize; i++) {
+  uint8_t *tbuf = chip->oob_poi; 
+  printk("%02x ", tbuf[i]);
+}
+printk("\n");
+#endif
+//printk("%s: call chip->cmdfunc(mtd, NAND_CMD_PAGEPROG(0x%02x), -1, -1)\n", __func__, NAND_CMD_PAGEPROG);
 
 	/* Send command to program the OOB data */
 	chip->cmdfunc(mtd, NAND_CMD_PAGEPROG, -1, -1);
@@ -663,6 +682,14 @@ static int pl35x_nand_read_page_hwecc(struct mtd_info *mtd,
 		p += eccsize;
 	}
 	chip->read_buf(mtd, p, (eccsize - PL35X_NAND_LAST_TRANSFER_LENGTH));
+#ifdef HPSC_DEBUG
+printk("%s: chip->read_buf: %d bytes", __func__, (eccsize - PL35X_NAND_LAST_TRANSFER_LENGTH));
+for(i = 0; i < (eccsize - PL35X_NAND_LAST_TRANSFER_LENGTH); i++) {
+   if (i % 16 == 0) printk("\n0x%05x: ", i);
+   printk("0x%02x ", p[i]);
+}
+printk("\n");
+#endif
 	p += (eccsize - PL35X_NAND_LAST_TRANSFER_LENGTH);
 
 	/* Set ECC Last bit to 1 */
@@ -673,9 +700,19 @@ static int pl35x_nand_read_page_hwecc(struct mtd_info *mtd,
 	chip->IO_ADDR_R = (void __iomem * __force)data_phase_addr;
 	chip->read_buf(mtd, p, PL35X_NAND_LAST_TRANSFER_LENGTH);
 
+#ifdef HPSC_DEBUG
+printk("%s: chip->read_buf: %d bytes", __func__, (PL35X_NAND_LAST_TRANSFER_LENGTH));
+for(i = 0; i < (PL35X_NAND_LAST_TRANSFER_LENGTH); i++) {
+   if (i % 16 == 0) printk("\n0x%05x: ", i);
+   printk("0x%02x ", p[i]);
+}
+printk("\n");
+#endif
 	/* Read the calculated ECC value */
 	p = buf;
+//printk("%s: call chip->ecc.calculate\n", __func__);
 	chip->ecc.calculate(mtd, p, &ecc_calc[0]);
+//printk("%s: Done read the calculated ECC value 0x%x, 0x%x, 0x%x, 0x%x\n", __func__, ecc_calc[0], ecc_calc[1],ecc_calc[2],ecc_calc[3]);
 
 	/* Clear ECC last bit */
 	data_phase_addr = (unsigned long __force)chip->IO_ADDR_R;
@@ -686,9 +723,16 @@ static int pl35x_nand_read_page_hwecc(struct mtd_info *mtd,
 
 	/* Read the stored ECC value */
 	oob_ptr = chip->oob_poi;
+//printk("%s: Start reading the stored ECC value from addr(%p), size(mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH = 0x%x)\n", __func__, chip->IO_ADDR_R, mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH);
 	chip->read_buf(mtd, oob_ptr,
 			(mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH));
 
+#ifdef HPSC_DEBUG
+for (i = 0; i < mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH; i++) 
+   if (i % 16 == 0) printk("\n0x%05x: ", i);
+   printk("0x%02x ", oob_ptr[i]);
+printk("\n");
+#endif
 	/* de-assert chip select */
 	data_phase_addr = (unsigned long __force)chip->IO_ADDR_R;
 	data_phase_addr -= nand_offset;
@@ -697,6 +741,7 @@ static int pl35x_nand_read_page_hwecc(struct mtd_info *mtd,
 	chip->IO_ADDR_R = (void __iomem * __force)data_phase_addr;
 
 	oob_ptr += (mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH);
+//printk("%s: oob_ptr = mtd->oobsize(%d) - PL35X_NAND_LAST_TRANSFER_LENGTH(%d) \n", __func__, mtd->oobsize, PL35X_NAND_LAST_TRANSFER_LENGTH);
 	chip->read_buf(mtd, oob_ptr, PL35X_NAND_LAST_TRANSFER_LENGTH);
 
 	ret = mtd_ooblayout_get_eccbytes(mtd, ecc_code, chip->oob_poi, 0,
@@ -704,11 +749,22 @@ static int pl35x_nand_read_page_hwecc(struct mtd_info *mtd,
 	if (ret)
 		return ret;
 
+#ifdef HPSC_DEBUG
+printk("ecc in oob: ");
+for (i = 0; i < chip->ecc.total; i++)
+printk("0x%02x ", ecc_code[i]);
+printk("\n");
+printk("ecc calc : ");
+for (i = 0; i < chip->ecc.total; i++)
+printk("0x%02x ", ecc_calc[i]);
+printk("\n");
+#endif
 	eccsteps = chip->ecc.steps;
 	p = buf;
 
 	/* Check ECC error for all blocks and correct if it is correctable */
 	for (i = 0 ; eccsteps; eccsteps--, i += eccbytes, p += eccsize) {
+//printk("%s: Start chip->ecc.correct\n", __func__);
 		stat = chip->ecc.correct(mtd, p, &ecc_code[i], &ecc_calc[i]);
 		if (stat < 0)
 			mtd->ecc_stats.failed++;
@@ -791,7 +847,7 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 	struct pl35x_nand_info *xnand =
 		container_of(chip, struct pl35x_nand_info, chip);
 	void __iomem *cmd_addr;
-	unsigned long cmd_data = 0, end_cmd_valid = 0;
+	unsigned int cmd_data = 0, end_cmd_valid = 0;
 	unsigned long cmd_phase_addr, data_phase_addr, end_cmd, i;
 	unsigned long timeout = jiffies + PL35X_NAND_DEV_BUSY_TIMEOUT;
 	u32 addrcycles;
@@ -836,7 +892,12 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 	else
 		end_cmd = curr_cmd->end_cmd;
 
+#ifdef HPSC
+	/* this never be hit */
+	if ((command == NAND_CMD_READ0 || command == NAND_CMD_SEQIN) && !curr_cmd)
+#else
 	if (command == NAND_CMD_READ0 || command == NAND_CMD_SEQIN)
+#endif
 		addrcycles = xnand->row_addr_cycles + xnand->col_addr_cycles;
 	else if (command == NAND_CMD_ERASE1)
 		addrcycles = xnand->row_addr_cycles;
@@ -937,7 +998,7 @@ static void pl35x_nand_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
 {
 	int i;
 	struct nand_chip *chip =  mtd_to_nand(mtd);
-	unsigned long *ptr = (unsigned long *)buf;
+	unsigned int *ptr = (unsigned int *)buf;
 
 	len >>= 2;
 	for (i = 0; i < len; i++)
@@ -955,7 +1016,7 @@ static void pl35x_nand_write_buf(struct mtd_info *mtd, const uint8_t *buf,
 {
 	int i;
 	struct nand_chip *chip = mtd_to_nand(mtd);
-	unsigned long *ptr = (unsigned long *)buf;
+	unsigned int *ptr = (unsigned int *)buf;
 
 	len >>= 2;
 
