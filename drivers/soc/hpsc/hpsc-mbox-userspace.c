@@ -366,24 +366,16 @@ static int mbox_create_dev_files(struct platform_device *pdev,
 	struct device_node *dt_node = tdev->dev->of_node;
 	struct property *names_prop;
 	char devf_name[16];
-	const char *mbox_name = NULL;
-	const char *fname;
+	const char *fname = NULL;
 	int i;
 	int ret, rc;
 	dev_t dev;
 
 	names_prop = of_find_property(dt_node, DT_MBOX_NAMES_PROP, NULL);
-	if (names_prop) {
-		mbox_name = of_prop_next_string(names_prop, NULL);
-		if (!mbox_name)
-			dev_err(&pdev->dev,
-				"%s: no values in '%s' prop string list\n",
-				__func__, DT_MBOX_NAMES_PROP);
-	} else {
-		dev_err(&pdev->dev,
+	if (!names_prop) 
+		dev_dbg(&pdev->dev,
 			"%s: no '%s' property, not creating named device files\n",
 			__func__, DT_MBOX_NAMES_PROP);
-	}
 
 	mbox_chan_dev_ar = devm_kzalloc(&pdev->dev, num_chans * sizeof(struct mbox_chan_dev), GFP_KERNEL);
 	if (mbox_chan_dev_ar == NULL) {
@@ -407,12 +399,10 @@ static int mbox_create_dev_files(struct platform_device *pdev,
 	}
 
 	for (i = 0; i < num_chans; ++i) {
-		if (names_prop && mbox_name) { // name from DT node
-			fname = mbox_name;
-
+		if (names_prop) { // name from DT node
 			// Advance the iterator over the names
-			mbox_name = of_prop_next_string(names_prop, mbox_name);
-			if (!mbox_name && i < num_chans - 1) {
+			fname = of_prop_next_string(names_prop, fname);
+			if (!fname) {
 				dev_err(&pdev->dev,
 					"fewer items in property '%s' than in property '%s'\n",
 					DT_MBOX_NAMES_PROP, DT_MBOXES_PROP);
