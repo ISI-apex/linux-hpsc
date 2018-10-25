@@ -67,9 +67,9 @@ static void mbox_received(struct mbox_client *client, void *message)
 		// can't memcpy, need 4-byte word reads
 		for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i)
 			mbox_chan_dev->message[i] = msg[i];
-		mbox_chan_dev->rx_msg_pending = true;
 		print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS,
 				     mbox_chan_dev->message, MBOX_MAX_MSG_LEN);
+		mbox_chan_dev->rx_msg_pending = true;
 	}
 	spin_unlock(&mbox_chan_dev->lock);
 }
