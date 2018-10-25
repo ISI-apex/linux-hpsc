@@ -85,6 +85,16 @@
 				 (0xE0 << 16) |	/* Read col change end cmd */ \
 				 (1 << 24)) /* Read col change end cmd valid */
 #define PL35X_NAND_ECC_BUSY_TIMEOUT	(1 * HZ)
+
+//#define PL35X_ERR_DEBUG
+#ifdef PL35X_ERR_DEBUG
+#define DB_PRINT(...) do { \
+    fprintf(stderr,  ": %s: ", __func__); \
+    fprintf(stderr, ## __VA_ARGS__); \
+    } while (0);
+#else
+    #define DB_PRINT(...)
+#endif
 /**
  * struct pl35x_smc_data - Private smc driver structure
  * @devclk:		Pointer to the peripheral clock
