@@ -11,6 +11,10 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
+#include <linux/cdev.h>
+#include <linux/poll.h>
+#include <linux/wait.h>
+#include <linux/workqueue.h>
 
 #define HPSC_MBOX_DATA_REGS	16
 #define MBOX_MAX_MSG_LEN	(HPSC_MBOX_DATA_REGS * 4) // each reg is 32-bit
@@ -31,6 +35,7 @@ struct mbox_chan_dev {
 	struct mbox_client	client;
 	struct mbox_chan	*channel;
 	spinlock_t		lock;
+	wait_queue_head_t       wq;
 
 	// Mailbox instance identifiers and config, stays constant
 	unsigned		instance_idx;
@@ -72,6 +77,9 @@ static void mbox_received(struct mbox_client *client, void *message)
 		mbox_chan_dev->rx_msg_pending = true;
 	}
 	spin_unlock(&mbox_chan_dev->lock);
+
+	if (mbox_chan_dev->rx_msg_pending)
+	    wake_up_interruptible(&mbox_chan_dev->wq);
 }
 
 static void mbox_sent(struct mbox_client *client, void *message, int r)
@@ -85,6 +93,8 @@ static void mbox_sent(struct mbox_client *client, void *message, int r)
 	mbox_chan_dev->send_rc = r;
 	mbox_chan_dev->send_ack = true;
 	spin_unlock(&mbox_chan_dev->lock);
+
+	wake_up_interruptible(&mbox_chan_dev->wq);
 }
 
 static int mbox_open(struct inode *inodep, struct file *filp)
@@ -275,10 +285,29 @@ out:
 	return ret;
 }
 
+static unsigned int mbox_poll(struct file *filp, poll_table *wait)
+{
+	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
+        unsigned int rc = 0;
+
+        dev_err(mbox_chan_dev->tdev->dev, "poll\n");
+
+        poll_wait(filp, &mbox_chan_dev->wq, wait);
+
+        if (mbox_chan_dev->rx_msg_pending || mbox_chan_dev->send_ack)
+                rc |= POLLIN | POLLRDNORM;
+        if (!mbox_chan_dev->send_ack)
+                rc |= POLLOUT | POLLWRNORM;
+
+        dev_err(mbox_chan_dev->tdev->dev, "poll ret: %d\n", rc);
+        return rc;
+}
+
 static const struct file_operations mbox_fops = {
 	.owner		= THIS_MODULE,
 	.write		= mbox_write,
 	.read		= mbox_read,
+	.poll           = mbox_poll,
 	.open		= mbox_open,
 	.release	= mbox_release,
 };
@@ -304,6 +333,7 @@ static int mbox_device_create(struct mbox_chan_dev *mbox_chan_dev,
 	mbox_chan_dev->instance_idx = minor;
 	mbox_client_init(&mbox_chan_dev->client, tdev->dev);
 	spin_lock_init(&mbox_chan_dev->lock);
+	init_waitqueue_head(&mbox_chan_dev->wq);
 	cdev_init(&mbox_chan_dev->cdev, &mbox_fops);
 
 	rc = cdev_add(&mbox_chan_dev->cdev, devno, 1);
