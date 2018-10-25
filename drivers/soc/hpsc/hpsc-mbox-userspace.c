@@ -388,16 +388,14 @@ static int mbox_create_dev_files(struct platform_device *pdev,
 	mbox_chan_dev_ar = devm_kzalloc(&pdev->dev, num_chans * sizeof(struct mbox_chan_dev), GFP_KERNEL);
 	if (mbox_chan_dev_ar == NULL) {
 		dev_err(&pdev->dev, "failed to alloc mailbox instance state\n");
-		rc = -ENOMEM;
-		goto fail_devf;
+		return -ENOMEM;
 	}
 
 	rc = alloc_chrdev_region(&dev, /* baseminor */ 0, num_chans,
 				 MBOX_DEVICE_NAME);
 	if (rc < 0) {
 		dev_err(&pdev->dev, "failed to alloc chrdev region\n");
-		rc = -EFAULT;
-		goto fail_region;
+		return -EFAULT;
 	}
 	major_num = MAJOR(dev);
 
@@ -412,15 +410,15 @@ static int mbox_create_dev_files(struct platform_device *pdev,
 		if (names_prop && mbox_name) { // name from DT node
 			fname = mbox_name;
 
-		// Advance the iterator over the names
-		mbox_name = of_prop_next_string(names_prop, mbox_name);
-		if (!mbox_name && i < num_chans - 1) {
-			dev_err(&pdev->dev,
-				"fewer items in property '%s' than in property '%s'\n",
-				DT_MBOX_NAMES_PROP, DT_MBOXES_PROP);
-			rc = -EFAULT;
-			goto fail_dev;
-		}
+			// Advance the iterator over the names
+			mbox_name = of_prop_next_string(names_prop, mbox_name);
+			if (!mbox_name && i < num_chans - 1) {
+				dev_err(&pdev->dev,
+					"fewer items in property '%s' than in property '%s'\n",
+					DT_MBOX_NAMES_PROP, DT_MBOXES_PROP);
+				rc = -EFAULT;
+				goto fail_dev;
+			}
 
 		} else { // index with a prefix
 			ret = snprintf(devf_name, sizeof(devf_name), "mbox%u", i);
@@ -449,9 +447,6 @@ fail_dev:
 	class_destroy(class);
 fail_class:
 	unregister_chrdev_region(MKDEV(major_num, 0), num_chans);
-fail_region:
-	kfree(mbox_chan_dev_ar);
-fail_devf:
 	return rc;
 }
 
