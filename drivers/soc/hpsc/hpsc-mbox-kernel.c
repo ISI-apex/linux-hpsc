@@ -51,7 +51,7 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 		print_hex_dump_bytes("rx_callback", DUMP_PREFIX_ADDRESS, msg,
 				     HPSC_MBOX_CLIENT_KERNEL_MSG_LEN);
 	} else {
-		hpsc_notif_recv(notif_h, msg);
+		hpsc_notif_recv(notif_h, msg, HPSC_MBOX_CLIENT_KERNEL_MSG_LEN);
 		// NOTE: yes, this is abuse of the method, but otherwise we need to
 		// add another method to the interface.
 		// Tell the controller to issue the ACK.
@@ -131,8 +131,8 @@ static int hpsc_mbox_verify_chan_cfg(struct mbox_client_dev *tdev)
 
 static void hpsc_mbox_notif_handler_init(struct hpsc_notif_handler *h)
 {
+	h->type = HPSC_NOTIF_HANDLER_MAILBOX;
 	h->name = "HPSC Mailbox Client Kernel";
-	h->msg_sz = HPSC_MBOX_CLIENT_KERNEL_MSG_LEN;
 	h->send = hpsc_mbox_client_kernel_send;
 }
 
@@ -209,6 +209,11 @@ static int hpsc_mbox_client_kernel_probe(struct platform_device *pdev)
 		spin_unlock(&mbox_chan_dev_ar[i].lock);
 
 	dev_info(&pdev->dev, "Mailbox client kernel module registered\n");
+#if 0
+	u8 msg[HPSC_MBOX_CLIENT_KERNEL_MSG_LEN] = { 0x1 };
+	ret = hpsc_mbox_client_kernel_send(msg);
+	pr_info("hpsc_mbox_client_kernel_send: %d\n", ret);
+#endif
 	return 0;
 
 fail_channel:
