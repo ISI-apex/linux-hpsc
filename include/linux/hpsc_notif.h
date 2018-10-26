@@ -12,51 +12,29 @@
 #ifndef __HPSC_NOTIF_H
 #define __HPSC_NOTIF_H
 
-#define HPSC_NOTIF_MSG_SIZE 64
-
-// Message type enumeration
-enum hpsc_notif_type {
-	// Value 0 is reserved so empty messages can be recognized
-	HPSC_NOTIF_INVALID = 0,
-	// responses - payload contains ID of the response being acknowledged
-	READ_VALUE,
-	WRITE_STATUS,
-	// general operations
-	READ_FILE,
-	WRITE_FILE,
-	READ_PROP,
-	WRITE_PROP,
-	READ_ADDR,
-	WRITE_ADDR,
-	// notifications
-	WATCHDOG_TIMEOUT,
-	FAULT,
-	// an enumerated/predefined action
-	ACTION,
-	// enum counter
-	HPSC_NOTIF_TYPE_COUNT
+enum hpsc_notif_handler_type {
+	HPSC_NOTIF_HANDLER_MAILBOX,
+	HPSC_NOTIF_HANDLER_COUNT
 };
 
 /**
  * Handlers are registered by modules that can exchange messages.
  * They are usually configured through the device tree.
  *
- * @name:   a unique identifier for debugging
- * @msg_sz: The message size this handler requires
+ * @type:   The handler type - only one of each is allowed to be registered
+ * @name:   A unique identifier for debugging
  * @send:   A function pointer for sending data using this handler
  */
 struct hpsc_notif_handler {
+	enum hpsc_notif_handler_type type;
 	const char* name;
-	size_t msg_sz;
 	int (*send)(void *msg);
-	/* Internal to API */
-	struct list_head node;
 };
 
 /**
  * Used by handlers to register themselves.
  *
- * @param h the handler
+ * @param h The handler
  * @return 0 on success, a negative error code otherwise
  */
 int hpsc_notif_handler_register(struct hpsc_notif_handler *h);
@@ -64,26 +42,27 @@ int hpsc_notif_handler_register(struct hpsc_notif_handler *h);
 /**
  * Used by handlers to unregister themselves.
  *
- * @param h the handler
+ * @param h The registered handler
  */
 void hpsc_notif_handler_unregister(struct hpsc_notif_handler *h);
 
 /**
  * Called by handlers when they receive messages.
  *
- * @param h the registered handler
- * @param msg the message of size h->msg_sz
+ * @param h The registered handler
+ * @param msg The message
+ * @param sz Message size, currently must be HPSC_MSG_SIZE
  * @return 0 on success, a negative error code otherwise
  */
-int hpsc_notif_recv(struct hpsc_notif_handler *h, void *msg);
+int hpsc_notif_recv(struct hpsc_notif_handler *h, void *msg, size_t sz);
 
 /**
- * Used by kernel components to send a message to the Chiplet manager.
+ * Send a message to the Chiplet manager.
  * The first byte must be the message type, the following 3 bytes are reserved.
  * Message starts at the fifth byte, &msg[4].
  *
- * @param msg Pointer to the message buffer
- * @param sz Message size, currently must be HPSC_NOTIF_MSG_SIZE
+ * @param msg The message
+ * @param sz Message size, currently must be HPSC_MSG_SIZE
  * @return 0 on success, a negative error code otherwise
  */
 int hpsc_notif_send(void *msg, size_t sz);
