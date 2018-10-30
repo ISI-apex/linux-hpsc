@@ -204,6 +204,9 @@ obj-$(CONFIG_WATCHDOG_SUN4V)		+= sun4v_wdt.o
 # Xen
 obj-$(CONFIG_XEN_WDT) += xen_wdt.o
 
+# HPSC Architecture
+obj-$(CONFIG_HPSC_WDT) += hpsc-wdt.o
+
 # Architecture Independent
 obj-$(CONFIG_DA9052_WATCHDOG) += da9052_wdt.o
 obj-$(CONFIG_DA9055_WATCHDOG) += da9055_wdt.o

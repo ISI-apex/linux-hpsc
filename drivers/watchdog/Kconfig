@@ -1915,6 +1915,15 @@ config UML_WATCHDOG
 	tristate "UML watchdog"
 	depends on UML || COMPILE_TEST
 
+# HPSC Architecture
+config HPSC_WDT
+	tristate "HPSC Chiplet watchdog support"
+	depends on ARCH_HPSC
+	select WATCHDOG_CORE
+	help
+	  Say Y here to support HPSC Chiplet watchdogs. Each processor core has
+	  its own watchdog timer.
+
 #
 # ISA-based Watchdog Cards
 #
