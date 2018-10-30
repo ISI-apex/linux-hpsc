@@ -521,6 +521,7 @@ static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
 		mbox_chan_dev_destroy(&tdev->chans[i]);
 
 	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
+	kfree(tdev->chans);
 	kfree(tdev);
 
 	mutex_lock(&class_mutex);
