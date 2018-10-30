@@ -440,6 +440,7 @@ static struct platform_driver hpsc_mbox_driver = {
 };
 module_platform_driver(hpsc_mbox_driver);
 
-MODULE_AUTHOR("HPSC");
-MODULE_DESCRIPTION("Mailbox for HPSC chiplet");
+MODULE_DESCRIPTION("HPSC Chiplet mailbox driver");
+MODULE_AUTHOR("Alexei Colin <acolin@isi.edu>");
+MODULE_AUTHOR("Connor Imes <cimes@isi.edu>");
 MODULE_LICENSE("GPL v2");

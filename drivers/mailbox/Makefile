@@ -41,6 +41,6 @@ obj-$(CONFIG_ZYNQMP_IPI_MBOX)	+= zynqmp-ipi-mailbox.o
 
 obj-$(CONFIG_MAILBOX_TEST)	+= mailbox-test.o
 
-obj-$(CONFIG_MAILBOX_CLIENT_USERSPACE)	+= mailbox-client-userspace.o
+obj-$(CONFIG_HPSC_MBOX_USERSPACE)	+= hpsc-mbox-userspace.o
 
-obj-$(CONFIG_HPSC_MBOX_CLIENT_KERNEL)	+= hpsc-mbox-client-kernel.o
+obj-$(CONFIG_HPSC_MBOX_KERNEL)	+= hpsc-mbox-kernel.o
