@@ -20,10 +20,6 @@
 
 #define HPSC_MBOX_MSG_LEN 64
 
-struct mbox_client_dev {
-	struct device *dev;
-};
-
 struct mbox_chan_dev {
 	struct mbox_client_dev	*tdev;
 	struct mbox_client	client;
@@ -33,8 +29,12 @@ struct mbox_chan_dev {
 	bool			send_ack;
 };
 
-static struct mbox_chan_dev *mbox_chan_dev_ar;
-static struct hpsc_notif_handler *notif_h;
+struct mbox_client_dev {
+	struct mbox_chan_dev		chans[DT_MBOXES_COUNT];
+	struct hpsc_notif_handler	notif_h;
+	struct device			*dev;
+};
+
 
 static void client_rx_callback(struct mbox_client *cl, void *msg)
 {
@@ -51,7 +51,7 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 		print_hex_dump_bytes("rx_callback", DUMP_PREFIX_ADDRESS, msg,
 				     HPSC_MBOX_MSG_LEN);
 	} else {
-		hpsc_notif_recv(notif_h, msg, HPSC_MBOX_MSG_LEN);
+		hpsc_notif_recv(&cdev->tdev->notif_h, msg, HPSC_MBOX_MSG_LEN);
 		// NOTE: yes, this is abuse of the method, but otherwise we need to
 		// add another method to the interface.
 		// Tell the controller to issue the ACK.
@@ -73,13 +73,13 @@ static void client_tx_done(struct mbox_client *cl, void *msg, int r)
 		dev_info(cl->dev, "tx_done: got ACK\n");
 }
 
-static int hpsc_mbox_kernel_send(void *msg)
+static int hpsc_mbox_kernel_send(struct hpsc_notif_handler *h, void *msg)
 {
 	// send message synchronously
-	struct mbox_chan_dev *cdev;
+	struct mbox_client_dev *tdev = container_of(h, struct mbox_client_dev, notif_h);
+	struct mbox_chan_dev *cdev = &tdev->chans[DT_MBOX_OUT];
 	int ret;
 	pr_info("HPSC mbox kernel: send\n");
-	cdev = &mbox_chan_dev_ar[DT_MBOX_OUT];
 	spin_lock(&cdev->lock);
 	if (!cdev->send_ack) {
 		// previous message not yet ack'd
@@ -90,8 +90,7 @@ static int hpsc_mbox_kernel_send(void *msg)
 	if (ret >= 0)
 		cdev->send_ack = false;
 	else
-		dev_err(cdev->tdev->dev, "Failed to send mailbox message: %d\n",
-			ret);
+		dev_err(tdev->dev, "Failed to send mailbox message: %d\n", ret);
 send_out:
 	spin_unlock(&cdev->lock);
 	return ret;
@@ -171,27 +170,21 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	tdev->dev = &pdev->dev;
 	platform_set_drvdata(pdev, tdev);
 
-	// verify channel configuration in device tree, create/init chan array
+	// verify channel configuration in device tree, init chan array
 	ret = hpsc_mbox_verify_chan_cfg(tdev);
 	if (ret)
 		return ret;
-	mbox_chan_dev_ar = devm_kzalloc(&pdev->dev, DT_MBOXES_COUNT * sizeof(struct mbox_chan_dev), GFP_KERNEL);
-	if (!mbox_chan_dev_ar)
-		return -ENOMEM;
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
-		hpsc_mbox_chan_dev_init(&mbox_chan_dev_ar[i], tdev);
+		hpsc_mbox_chan_dev_init(&tdev->chans[i], tdev);
 
-	// create/init notifier handler
-	notif_h = devm_kzalloc(&pdev->dev, sizeof(*notif_h), GFP_KERNEL);
-	if (!notif_h)
-		return -ENOMEM;
-	hpsc_mbox_notif_handler_init(notif_h);
+	// init notifier handler
+	hpsc_mbox_notif_handler_init(&tdev->notif_h);
 
 	// We must delay processing of pending messages until we've registered
 	// with notif handler, which requires all channels to be open.
 	// First, lock each channel before opening them
 	for (i = 0; i < DT_MBOXES_COUNT; i++) {
-		cdev = &mbox_chan_dev_ar[i];
+		cdev = &tdev->chans[i];
 		spin_lock(&cdev->lock);
 		cdev->channel = mbox_request_channel(&cdev->client, i);
 		if (IS_ERR(cdev->channel)) {
@@ -202,23 +195,23 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 		}
 	}
 	// Now register with notification handler
-	ret = hpsc_notif_handler_register(notif_h);
+	ret = hpsc_notif_handler_register(&tdev->notif_h);
 	BUG_ON(ret); // shouldn't fail if we setup notif_h correctly
 	// Finally, release the lock to start processing any pending messages
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
-		spin_unlock(&mbox_chan_dev_ar[i].lock);
+		spin_unlock(&tdev->chans[i].lock);
 
 	dev_info(&pdev->dev, "registered\n");
 #if 0
 	u8 msg[HPSC_MBOX_MSG_LEN] = { 0x1 };
-	ret = hpsc_mbox_kernel_send(msg);
+	ret = hpsc_mbox_kernel_send(&tdev->notif_h, msg);
 	pr_info("hpsc_mbox_kernel_send: %d\n", ret);
 #endif
 	return 0;
 
 fail_channel:
 	for (i--; i >= 0; i--) {
-		cdev = &mbox_chan_dev_ar[i];
+		cdev = &tdev->chans[i];
 		mbox_free_channel(cdev->channel);
 		cdev->channel = NULL;
 		spin_unlock(&cdev->lock);
@@ -229,13 +222,14 @@ fail_channel:
 static int hpsc_mbox_kernel_remove(struct platform_device *pdev)
 {
 	int i;
+	struct mbox_client_dev *tdev = platform_get_drvdata(pdev);
 	dev_info(&pdev->dev, "remove\n");
 	// unregister with notification handler
-	hpsc_notif_handler_unregister(notif_h);
+	hpsc_notif_handler_unregister(&tdev->notif_h);
 	// close channels
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
-		mbox_free_channel(mbox_chan_dev_ar[i].channel);
-	// mbox_chan_dev_ar and notif_h managed for us
+		mbox_free_channel(tdev->chans[i].channel);
+	// mbox_client_dev instance managed for us
 	dev_info(&pdev->dev, "unregistered\n");
 	return 0;
 }

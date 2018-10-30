@@ -28,7 +28,7 @@ enum hpsc_notif_handler_type {
 struct hpsc_notif_handler {
 	enum hpsc_notif_handler_type type;
 	const char* name;
-	int (*send)(void *msg);
+	int (*send)(struct hpsc_notif_handler *h, void *msg);
 };
 
 /**

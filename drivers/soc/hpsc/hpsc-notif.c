@@ -52,7 +52,7 @@ static int __hpsc_notif_send(void *msg)
 		h = handlers[i];
 		if (h) {
 			pr_info("HPSC Notif: send to: %s\n", h->name);
-			ret = h->send(msg);
+			ret = h->send(h, msg);
 			goto out;
 		}
 	}
