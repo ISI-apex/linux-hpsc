@@ -2,13 +2,15 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
+#include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/hpsc_msg.h>
 #include <linux/hpsc_notif.h>
 
+// Messages may be sent or received during interrupts or other critical times
+// where sleeping isn't allowed. Therefore, we must use a spinlock, not a mutex.
+static DEFINE_SPINLOCK(notif_lock);
 static struct hpsc_notif_handler *handlers[HPSC_NOTIF_HANDLER_COUNT];
-static DEFINE_MUTEX(con_mutex);
 
 int hpsc_notif_handler_register(struct hpsc_notif_handler *h)
 {
@@ -16,13 +18,13 @@ int hpsc_notif_handler_register(struct hpsc_notif_handler *h)
 	if (!h || h->type >= HPSC_NOTIF_HANDLER_COUNT || !h->name || !h->send)
 		return -EINVAL;
 	pr_info("HPSC Notif: registering handler: %s\n", h->name);
-	mutex_lock(&con_mutex);
+	spin_lock(&notif_lock);
 	if (handlers[h->type])
 		// device of this type already registered
 		ret = -EBUSY;
 	else
 		handlers[h->type] = h;
-	mutex_unlock(&con_mutex);
+	spin_unlock(&notif_lock);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(hpsc_notif_handler_register);
@@ -32,35 +34,30 @@ void hpsc_notif_handler_unregister(struct hpsc_notif_handler *h)
 	if (!h || h->type >= HPSC_NOTIF_HANDLER_COUNT)
 		return;
 	pr_info("HPSC Notif: unregistering handler: %s\n", h->name);
-	mutex_lock(&con_mutex);
+	spin_lock(&notif_lock);
 	handlers[h->type] = NULL;
-	mutex_unlock(&con_mutex);
+	spin_unlock(&notif_lock);
 }
 EXPORT_SYMBOL_GPL(hpsc_notif_handler_unregister);
 
 // TODO: Fall back on other handlers on send error?
 // TODO: Support retries on ret == -EAGAIN (by some policy)
+// Callers are responsible for holding the spinlock
 static int __hpsc_notif_send(void *msg)
 {
 	struct hpsc_notif_handler *h;
 	int i;
-	int ret;
 	BUG_ON(!msg);
-	mutex_lock(&con_mutex);
 	for (i = 0; i < HPSC_NOTIF_HANDLER_COUNT; i++) {
 		// handlers are ordered by preference
 		h = handlers[i];
 		if (h) {
 			pr_info("HPSC Notif: send to: %s\n", h->name);
-			ret = h->send(h, msg);
-			goto out;
+			return h->send(h, msg);
 		}
 	}
 	pr_err("HPSC Notif: send: no matching handlers!\n");
-	ret = -ENODEV;
-out:
-	mutex_unlock(&con_mutex);
-	return ret;
+	return -ENODEV;
 }
 
 static void msgcpy(void *dest, void *src, size_t sz)
@@ -167,9 +164,9 @@ int hpsc_notif_send(void *msg, size_t sz)
 	pr_debug("HPSC Notif: send\n");
 	BUG_ON(!msg);
 	BUG_ON(sz != HPSC_MSG_SIZE);
-	mutex_lock(&con_mutex);
+	spin_lock(&notif_lock);
 	ret = __hpsc_notif_send(msg);
-	mutex_unlock(&con_mutex);
+	spin_unlock(&notif_lock);
 	pr_info("HPSC Notif: send: result = %d\n", ret);
 	return ret;
 }
