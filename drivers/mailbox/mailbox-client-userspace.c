@@ -1,18 +1,18 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
-#include <linux/fs.h>
 #include <linux/err.h>
+#include <linux/fs.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/mailbox_client.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
-#include <linux/cdev.h>
-#include <linux/poll.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 
@@ -25,8 +25,14 @@
 
 #define MBOX_DEVICE_NAME "mbox"
 
+struct mbox_chan_dev;
+
 struct mbox_client_dev {
 	struct device		*dev;
+	struct mbox_chan_dev	*chans;
+	int			num_chans;
+	unsigned		major_num;
+	unsigned		instance;
 };
 
 struct mbox_chan_dev {
@@ -51,11 +57,10 @@ struct mbox_chan_dev {
 	int			send_rc;  // status code controller gives us for the ACK
 };
 
-
+// May be multiple mailbox instances - manage shared mailbox class accordingly
+static DEFINE_MUTEX(class_mutex);
 static struct class *class;
-static unsigned major_num = 0;
-static int num_chans = 0;
-static struct mbox_chan_dev *mbox_chan_dev_ar;
+static int num_clients = 0;
 
 
 static void mbox_received(struct mbox_client *client, void *message)
@@ -87,7 +92,7 @@ static void mbox_sent(struct mbox_client *client, void *message, int r)
 	struct mbox_chan_dev *mbox_chan_dev = container_of(client, struct mbox_chan_dev, client);
 	spin_lock(&mbox_chan_dev->lock);
 	if (r)
-		dev_warn(client->dev, "send: got NACK%d\n", r);
+		dev_warn(client->dev, "sent: got NACK%d\n", r);
 	else
 		dev_info(client->dev, "sent: got ACK\n");
 	mbox_chan_dev->send_rc = r;
@@ -99,19 +104,17 @@ static void mbox_sent(struct mbox_client *client, void *message, int r)
 
 static int mbox_open(struct inode *inodep, struct file *filp)
 {
-	struct mbox_chan_dev *mbox_chan_dev;
-	struct mbox_client_dev *tdev;
+	struct mbox_chan_dev *mbox_chan_dev = container_of(inodep->i_cdev,
+							   struct mbox_chan_dev,
+							   cdev);
+	struct mbox_client_dev *tdev = mbox_chan_dev->tdev;
+	unsigned int major = imajor(inodep);
+	unsigned int minor = iminor(inodep);
 	struct of_phandle_args spec;
 	int ret;
 
-	unsigned int major = imajor(inodep);
-	unsigned int minor = iminor(inodep);
-
-	if (major != major_num || minor >= num_chans)
+	if (major != tdev->major_num || minor >= tdev->num_chans)
 		return -ENODEV;
-
-	mbox_chan_dev = &mbox_chan_dev_ar[minor];
-	tdev = mbox_chan_dev->tdev;
 
 	spin_lock(&mbox_chan_dev->lock);
 
@@ -151,7 +154,7 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	// We allow reading of outgoing mbox (to get the [N]ACK), but not
 	// writing of incoming mbox.
 	if (mbox_chan_dev->incoming && filp->f_mode & FMODE_WRITE) {
-		dev_err(tdev->dev, "mailbox test: file access mode disagrees with spec in DT node\n");
+		dev_err(tdev->dev, "file access mode disagrees with spec in DT node\n");
 		ret = -EINVAL;
 		goto out;
 	}
@@ -321,13 +324,13 @@ static void mbox_client_init(struct mbox_client *cl, struct device *dev)
 	cl->knows_txdone	= false;
 }
 
-static int mbox_device_create(struct mbox_chan_dev *mbox_chan_dev,
-			      struct mbox_client_dev *tdev, int major,
-			      int minor, struct class *class, const char *name)
+static int mbox_chan_dev_init(struct mbox_chan_dev *mbox_chan_dev,
+			      struct mbox_client_dev *tdev, int minor,
+			      const char *name)
 {
 	struct device *device;
 	int rc;
-	dev_t devno = MKDEV(major, minor);
+	dev_t devno = MKDEV(tdev->major_num, minor);
 
 	mbox_chan_dev->tdev = tdev;
 	mbox_chan_dev->instance_idx = minor;
@@ -342,68 +345,45 @@ static int mbox_device_create(struct mbox_chan_dev *mbox_chan_dev,
 		return rc;
 	}
 
-	device = device_create(class, /* parent */ NULL, devno, NULL, name);
+	device = device_create(class, NULL, devno, NULL, "%s!%d!%s",
+			       class->name, tdev->instance, name);
 	if (IS_ERR(device)) {
-		rc = PTR_ERR(device);
 		dev_err(tdev->dev, "%s: failed to create device\n", __func__);
 		cdev_del(&mbox_chan_dev->cdev);
-		return rc;
+		return PTR_ERR(device);
 	}
 
 	return 0;
 }
 
-static void mbox_device_destroy(struct mbox_chan_dev *mbox_chan_dev, int major,
-				int minor, struct class *class)
+static void mbox_chan_dev_destroy(struct mbox_chan_dev *chan)
 {
-	device_destroy(class, MKDEV(major, minor));
-	cdev_del(&mbox_chan_dev->cdev);
+	device_destroy(class, MKDEV(chan->tdev->major_num, chan->instance_idx));
+	cdev_del(&chan->cdev);
 }
 
-static int mbox_create_dev_files(struct platform_device *pdev,
-				 struct mbox_client_dev *tdev)
+static int mbox_create_dev_files(struct mbox_client_dev *tdev)
 {
 	struct device_node *dt_node = tdev->dev->of_node;
 	struct property *names_prop;
 	char devf_name[16];
 	const char *fname = NULL;
 	int i;
-	int ret, rc;
-	dev_t dev;
+	int rc;
 
 	names_prop = of_find_property(dt_node, DT_MBOX_NAMES_PROP, NULL);
 	if (!names_prop) 
-		dev_dbg(&pdev->dev,
+		dev_dbg(tdev->dev,
 			"%s: no '%s' property, not creating named device files\n",
 			__func__, DT_MBOX_NAMES_PROP);
 
-	mbox_chan_dev_ar = devm_kzalloc(&pdev->dev, num_chans * sizeof(struct mbox_chan_dev), GFP_KERNEL);
-	if (mbox_chan_dev_ar == NULL) {
-		dev_err(&pdev->dev, "failed to alloc mailbox instance state\n");
-		return -ENOMEM;
-	}
 
-	rc = alloc_chrdev_region(&dev, /* baseminor */ 0, num_chans,
-				 MBOX_DEVICE_NAME);
-	if (rc < 0) {
-		dev_err(&pdev->dev, "failed to alloc chrdev region\n");
-		return -EFAULT;
-	}
-	major_num = MAJOR(dev);
-
-	class = class_create(THIS_MODULE, MBOX_DEVICE_NAME);
-	if (IS_ERR(class)) {
-		dev_err(&pdev->dev, "failed to alloc chrdev region\n");
-		rc = -EFAULT;
-		goto fail_class;
-	}
-
-	for (i = 0; i < num_chans; ++i) {
+	for (i = 0; i < tdev->num_chans; ++i) {
 		if (names_prop) { // name from DT node
 			// Advance the iterator over the names
 			fname = of_prop_next_string(names_prop, fname);
 			if (!fname) {
-				dev_err(&pdev->dev,
+				dev_err(tdev->dev,
 					"fewer items in property '%s' than in property '%s'\n",
 					DT_MBOX_NAMES_PROP, DT_MBOXES_PROP);
 				rc = -EFAULT;
@@ -411,21 +391,20 @@ static int mbox_create_dev_files(struct platform_device *pdev,
 			}
 
 		} else { // index with a prefix
-			ret = snprintf(devf_name, sizeof(devf_name), "mbox%u", i);
-			if (ret < 0 || ret >= sizeof(devf_name)) {
-				dev_err(&pdev->dev,
+			rc = snprintf(devf_name, sizeof(devf_name), "mbox%u", i);
+			if (rc < 0 || rc >= sizeof(devf_name)) {
+				dev_err(tdev->dev,
 					"failed to construct mbox device file name: rc %d\n",
-					ret);
+					rc);
 				rc = -EFAULT;
 				goto fail_dev;
 			}
 			fname = devf_name;
 		}
 
-		rc = mbox_device_create(&mbox_chan_dev_ar[i], tdev, major_num,
-					i, class, fname);
+		rc = mbox_chan_dev_init(&tdev->chans[i], tdev, i, fname);
 		if (rc) {
-			dev_err(&pdev->dev, "failed to construct mailbox device\n");
+			dev_err(tdev->dev, "failed to construct mailbox device\n");
 			goto fail_dev;
 		}
 	}
@@ -433,73 +412,141 @@ static int mbox_create_dev_files(struct platform_device *pdev,
 	return 0;
 fail_dev:
 	for (--i; i >= 0; --i) // i-th has failed, so no cleanup for i-th
-		mbox_device_destroy(&mbox_chan_dev_ar[i], major_num, i, class);
-	class_destroy(class);
-fail_class:
-	unregister_chrdev_region(MKDEV(major_num, 0), num_chans);
+		mbox_chan_dev_destroy(&tdev->chans[i]);
 	return rc;
 }
 
-static int mbox_test_probe(struct platform_device *pdev)
+static int mbox_client_dev_init(struct mbox_client_dev *tdev,
+				struct platform_device *pdev, unsigned instance)
 {
-	struct mbox_client_dev *tdev;
+	dev_t dev;
 	int ret;
-
-	dev_info(&pdev->dev, "mailbox test: probe\n");
-
-	tdev = devm_kzalloc(&pdev->dev, sizeof(*tdev), GFP_KERNEL);
-	if (!tdev) {
-		dev_err(&pdev->dev, "mailbox test: no mem\n");
-		return -ENOMEM;
-	}
 
 	tdev->dev = &pdev->dev;
 	platform_set_drvdata(pdev, tdev);
+	tdev->instance = instance;
 
-	num_chans = of_count_phandle_with_args(tdev->dev->of_node,
-					       DT_MBOXES_PROP, DT_MBOXES_CELLS);
-	dev_warn(tdev->dev, "%s: num instances in '%s' property: %d\n",
-		 __func__, DT_MBOXES_PROP, num_chans);
-	if (num_chans < 0)
+	tdev->num_chans = of_count_phandle_with_args(tdev->dev->of_node,
+						     DT_MBOXES_PROP,
+						     DT_MBOXES_CELLS);
+	dev_info(tdev->dev, "%s: num instances in '%s' property: %d\n",
+		 __func__, DT_MBOXES_PROP, tdev->num_chans);
+	if (tdev->num_chans < 0)
 		return -EINVAL;
 
-	ret = mbox_create_dev_files(pdev, tdev);
+	tdev->chans = kmalloc_array(tdev->num_chans, sizeof(*tdev->chans), GFP_KERNEL);
+	if (tdev->chans == NULL) {
+		dev_err(&pdev->dev, "failed to alloc mailbox instance state\n");
+		return -ENOMEM;
+	}
+
+	ret = alloc_chrdev_region(&dev, 0, tdev->num_chans, MBOX_DEVICE_NAME);
+	if (ret < 0) {
+		dev_err(tdev->dev, "failed to alloc chrdev region\n");
+		goto fail;
+	}
+	tdev->major_num = MAJOR(dev);
+
+	ret = mbox_create_dev_files(tdev);
 	if (ret)
-		return ret;
+		goto fail_files;
+
+	return 0;
+fail_files:
+	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
+fail:
+	kfree(tdev->chans);
+	return ret;
+
+}
+
+static int mbox_client_probe(struct platform_device *pdev)
+{
+	struct mbox_client_dev *tdev;
+	int ret;
+	unsigned instance;
+
+	dev_info(&pdev->dev, "probe\n");
+
+	mutex_lock(&class_mutex);
+	if (num_clients == 0) {
+		dev_info(&pdev->dev, "First instance, creating %s class...\n",
+			 MBOX_DEVICE_NAME);
+		class = class_create(THIS_MODULE, MBOX_DEVICE_NAME);
+		if (IS_ERR(class)) {
+			dev_err(&pdev->dev, "failed to create %s class\n",
+				MBOX_DEVICE_NAME);
+			mutex_unlock(&class_mutex);
+			return -EFAULT;
+		}
+	}
+	instance = num_clients;
+	num_clients++;
+	mutex_unlock(&class_mutex);
+
+	tdev = kmalloc(sizeof(*tdev), GFP_KERNEL);
+	if (!tdev) {
+		ret = -ENOMEM;
+		goto fail_dev;
+	}
+
+	ret = mbox_client_dev_init(tdev, pdev, instance);
+	if (ret)
+		goto fail_init;
 
 	dev_info(&pdev->dev, "Successfully registered\n");
 	return 0;
+fail_init:
+	kfree(tdev);
+fail_dev:
+	mutex_lock(&class_mutex);
+	num_clients--;
+	if (num_clients == 0)
+		class_destroy(class);
+	mutex_unlock(&class_mutex);
+	return ret;
 }
 
-static int mbox_test_remove(struct platform_device *pdev)
+static int mbox_client_remove(struct platform_device *pdev)
 {
+	struct mbox_client_dev *tdev = platform_get_drvdata(pdev);
 	int i;
 
-	for (i = num_chans - 1; i >= 0; --i)
-		mbox_device_destroy(&mbox_chan_dev_ar[i], major_num, i, class);
+	dev_info(&pdev->dev, "remove\n");
 
-	class_destroy(class);
-	unregister_chrdev_region(MKDEV(major_num, 0), num_chans);
+	for (i = tdev->num_chans - 1; i >= 0; --i)
+		mbox_chan_dev_destroy(&tdev->chans[i]);
 
-	// mbox_chan_dev deallocated by device manager
+	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
+	kfree(tdev);
 
+	mutex_lock(&class_mutex);
+	num_clients--;
+	if (num_clients == 0) {
+		dev_info(&pdev->dev, "Final instance, destroying %s class...\n",
+			 MBOX_DEVICE_NAME);
+		class_destroy(class);
+	}
+	mutex_unlock(&class_mutex);
+
+	dev_info(&pdev->dev, "Successfully unregistered\n");
 	return 0;
 }
 
-static const struct of_device_id mbox_test_match[] = {
+static const struct of_device_id mbox_client_match[] = {
 	{ .compatible = "mailbox-client-userspace" },
 	{},
 };
 
-static struct platform_driver mbox_test_driver = {
+static struct platform_driver mbox_client_driver = {
 	.driver = {
 		.name = "mailbox_client_userspace",
-		.of_match_table = mbox_test_match,
+		.of_match_table = mbox_client_match,
 	},
-	.probe  = mbox_test_probe,
-	.remove = mbox_test_remove,
+	.probe  = mbox_client_probe,
+	.remove = mbox_client_remove,
 };
-module_platform_driver(mbox_test_driver);
+module_platform_driver(mbox_client_driver);
 
 MODULE_DESCRIPTION("HPSC Mailbox client with interface to user-space");
 MODULE_AUTHOR("HPSC");
