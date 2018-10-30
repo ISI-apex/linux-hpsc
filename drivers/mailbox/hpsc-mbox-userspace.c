@@ -1,3 +1,7 @@
+/*
+ * HPSC userspace mailbox client.
+ * Provides device files for applications at /dev/mbox/<instance>/mbox<num>.
+ */
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -159,7 +163,6 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 		goto out;
 	}
 
-	dev_dbg(tdev->dev, "mbox_chan_dev: %p\n", mbox_chan_dev);
 	mbox_chan_dev->channel = mbox_request_channel(&mbox_chan_dev->client,
 						      mbox_chan_dev->instance_idx);
 	if (IS_ERR(mbox_chan_dev->channel)) {
@@ -293,7 +296,7 @@ static unsigned int mbox_poll(struct file *filp, poll_table *wait)
 	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
         unsigned int rc = 0;
 
-        dev_err(mbox_chan_dev->tdev->dev, "poll\n");
+        dev_info(mbox_chan_dev->tdev->dev, "poll\n");
 
         poll_wait(filp, &mbox_chan_dev->wq, wait);
 
@@ -302,7 +305,7 @@ static unsigned int mbox_poll(struct file *filp, poll_table *wait)
         if (!mbox_chan_dev->send_ack)
                 rc |= POLLOUT | POLLWRNORM;
 
-        dev_err(mbox_chan_dev->tdev->dev, "poll ret: %d\n", rc);
+        dev_info(mbox_chan_dev->tdev->dev, "poll ret: %d\n", rc);
         return rc;
 }
 
@@ -460,7 +463,7 @@ fail:
 
 }
 
-static int mbox_client_probe(struct platform_device *pdev)
+static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev;
 	int ret;
@@ -494,7 +497,7 @@ static int mbox_client_probe(struct platform_device *pdev)
 	if (ret)
 		goto fail_init;
 
-	dev_info(&pdev->dev, "Successfully registered\n");
+	dev_info(&pdev->dev, "registered\n");
 	return 0;
 fail_init:
 	kfree(tdev);
@@ -507,7 +510,7 @@ fail_dev:
 	return ret;
 }
 
-static int mbox_client_remove(struct platform_device *pdev)
+static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev = platform_get_drvdata(pdev);
 	int i;
@@ -529,25 +532,26 @@ static int mbox_client_remove(struct platform_device *pdev)
 	}
 	mutex_unlock(&class_mutex);
 
-	dev_info(&pdev->dev, "Successfully unregistered\n");
+	dev_info(&pdev->dev, "unregistered\n");
 	return 0;
 }
 
-static const struct of_device_id mbox_client_match[] = {
-	{ .compatible = "mailbox-client-userspace" },
+static const struct of_device_id hpsc_mbox_userspace_match[] = {
+	{ .compatible = "hpsc-mbox-userspace" },
 	{},
 };
 
-static struct platform_driver mbox_client_driver = {
+static struct platform_driver hpsc_mbox_userspace_driver = {
 	.driver = {
-		.name = "mailbox_client_userspace",
-		.of_match_table = mbox_client_match,
+		.name = "hpsc_mbox_userspace",
+		.of_match_table = hpsc_mbox_userspace_match,
 	},
-	.probe  = mbox_client_probe,
-	.remove = mbox_client_remove,
+	.probe  = hpsc_mbox_userspace_probe,
+	.remove = hpsc_mbox_userspace_remove,
 };
-module_platform_driver(mbox_client_driver);
+module_platform_driver(hpsc_mbox_userspace_driver);
 
-MODULE_DESCRIPTION("HPSC Mailbox client with interface to user-space");
-MODULE_AUTHOR("HPSC");
+MODULE_DESCRIPTION("HPSC mailbox userspace interface");
+MODULE_AUTHOR("Alexei Colin <acolin@isi.edu>");
+MODULE_AUTHOR("Connor Imes <cimes@isi.edu>");
 MODULE_LICENSE("GPL v2");

@@ -83,9 +83,9 @@ config BCM2835_MBOX
 config HPSC_MBOX
 	tristate "HPSC Mailbox"
 	help
-	  An implementation of a mailbox that serves as a placeholder for
-	  the mailbox on the HPSC chiplet, until the mailbox IP is decided.
-	  This placeholder implementation is based on the BCM2835 Mailbox.
+	  An implementation of the HPSC Chiplet mailbox. Mailboxes are used for
+	  communication between Chiplet subsystems. Say Y here if you want to
+	  use the HPSC Chiplet mailbox.
 
 config STI_MBOX
 	tristate "STI Mailbox framework support"
@@ -121,22 +121,26 @@ config MAILBOX_TEST
 	  Test client to help with testing new Controller driver
 	  implementations.
 
-config MAILBOX_CLIENT_USERSPACE
-	tristate "Mailbox Client for Userspace Interface"
+config HPSC_MBOX_USERSPACE
+	tristate "HPSC Mailbox Userspace Interface"
 	depends on OF
 	depends on HAS_IOMEM
+	depends on HPSC_MBOX
 	help
-	  A mailbox client that exposes an interface into the mailbox
-          hardware to userspace through device files.
+	  A mailbox client that exposes the HPSC mailbox hardware to userspace
+	  through device files. Say Y here if you want to enable userspace
+	  mailbox support for the HPSC Chiplet.
 
-config HPSC_MBOX_CLIENT_KERNEL
-	tristate "Mailbox Client for Kernel Interface"
+config HPSC_MBOX_KERNEL
+	tristate "HPSC Mailbox In-kernel Interface"
 	depends on OF
 	depends on HPSC_MBOX
 	depends on ARCH_HPSC
 	help
-	  A mailbox client that exposes an interface into the mailbox
-          hardware to other kernel components for messaging.
+	  A mailbox client that exposes the HPSC mailbox hardware to other
+	  kernel components. This interface is used for system management. Say
+	  Y here if you want to enable in-kernel mailbox support for the HPSC
+	  Chiplet.
 
 config XGENE_SLIMPRO_MBOX
 	tristate "APM SoC X-Gene SLIMpro Mailbox Controller"
