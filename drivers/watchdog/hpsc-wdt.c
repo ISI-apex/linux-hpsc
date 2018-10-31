@@ -21,17 +21,15 @@
 #include <linux/jiffies.h>
 #include <linux/timer.h>
 #include <linux/hpsc_msg.h>
+static unsigned int hpsc_wdt_dummy_cpu_ctr = 0;
 static void hpsc_wdt_timeout(unsigned long data) {
 	module_put(THIS_MODULE);
-	pr_info("HPSC Watchdog Timer expired!\n");
+	pr_info("HPSC Chiplet watchdog expired for cpu %lu\n", data);
 	hpsc_msg_wdt_timeout((unsigned int) data);
 	pr_crit("Initiating system reboot\n");
 	emergency_restart();
 	pr_crit("Reboot didn't ?????\n");
 }
-// TODO: hack - currently sharing one timer b/w instances
-static struct timer_list watchdog_ticktock =
-		TIMER_INITIALIZER(hpsc_wdt_timeout, 0, 0);
 #endif
 
 struct hpsc_wdt {
@@ -39,6 +37,10 @@ struct hpsc_wdt {
 	spinlock_t		lock;
 	struct device		*dev;
 	void __iomem		*base;
+	unsigned int		cpu;
+#ifdef HPSC_WDT_USE_SW_TIMER
+	struct timer_list	timer;
+#endif
 };
 
 static int hpsc_wdt_start(struct watchdog_device *wdog)
@@ -49,8 +51,7 @@ static int hpsc_wdt_start(struct watchdog_device *wdog)
 	spin_lock_irqsave(&wdt->lock, flags);
 	// TODO
 #ifdef HPSC_WDT_USE_SW_TIMER
-	if (!mod_timer(&watchdog_ticktock, jiffies+(wdog->timeout*HZ)))
-		__module_get(THIS_MODULE);
+	mod_timer(&wdt->timer, jiffies+(wdog->timeout*HZ));
 #endif
 	spin_unlock_irqrestore(&wdt->lock, flags);
 	return 0;
@@ -63,8 +64,7 @@ static int hpsc_wdt_stop(struct watchdog_device *wdog)
 	dev_info(wdt->dev, "stop\n");
 	// TODO
 #ifdef HPSC_WDT_USE_SW_TIMER
-	if (del_timer(&watchdog_ticktock))
-		module_put(THIS_MODULE);
+	del_timer(&wdt->timer);
 #endif
 	return 0;
 }
@@ -121,6 +121,14 @@ static int hpsc_wdt_probe(struct platform_device *pdev)
 	if (!wdt)
 		return -ENOMEM;
 	platform_set_drvdata(pdev, wdt);
+
+	// TODO: determine which CPU this watchdog is for
+	wdt->cpu = 0;
+
+#ifdef HPSC_WDT_USE_SW_TIMER
+	setup_timer(&wdt->timer, hpsc_wdt_timeout, hpsc_wdt_dummy_cpu_ctr);
+	hpsc_wdt_dummy_cpu_ctr++;
+#endif
 
 	base = of_iomap(dev->of_node, 0);
 	if (!base) {
