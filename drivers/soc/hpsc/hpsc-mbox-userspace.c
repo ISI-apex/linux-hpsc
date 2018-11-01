@@ -2,6 +2,7 @@
  * HPSC userspace mailbox client.
  * Provides device files for applications at /dev/mbox/<instance>/mbox<num>.
  */
+#include <linux/atomic.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -10,7 +11,6 @@
 #include <linux/kernel.h>
 #include <linux/mailbox_client.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
@@ -61,11 +61,10 @@ struct mbox_chan_dev {
 	int			send_rc;  // status code controller gives us for the ACK
 };
 
-// May be multiple mailbox instances - manage shared mailbox class accordingly
-static DEFINE_MUTEX(class_mutex);
+// May be multiple mailbox instances
+// Therefore, manage class at module init/exit, not device probe/remove
 static struct class *class;
-static int num_clients = 0;
-
+static atomic_t num_clients = ATOMIC_INIT(0);
 
 static void mbox_received(struct mbox_client *client, void *message)
 {
@@ -420,14 +419,13 @@ fail_dev:
 }
 
 static int mbox_client_dev_init(struct mbox_client_dev *tdev,
-				struct platform_device *pdev, unsigned instance)
+				struct platform_device *pdev)
 {
 	dev_t dev;
 	int ret;
 
 	tdev->dev = &pdev->dev;
 	platform_set_drvdata(pdev, tdev);
-	tdev->instance = instance;
 
 	tdev->num_chans = of_count_phandle_with_args(tdev->dev->of_node,
 						     DT_MBOXES_PROP,
@@ -450,12 +448,14 @@ static int mbox_client_dev_init(struct mbox_client_dev *tdev,
 	}
 	tdev->major_num = MAJOR(dev);
 
+	tdev->instance = atomic_inc_return(&num_clients) - 1;
 	ret = mbox_create_dev_files(tdev);
 	if (ret)
 		goto fail_files;
 
 	return 0;
 fail_files:
+	atomic_dec(&num_clients);
 	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
 fail:
 	kfree(tdev->chans);
@@ -467,33 +467,14 @@ static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev;
 	int ret;
-	unsigned instance;
 
 	dev_info(&pdev->dev, "probe\n");
 
-	mutex_lock(&class_mutex);
-	if (num_clients == 0) {
-		dev_info(&pdev->dev, "First instance, creating %s class...\n",
-			 MBOX_DEVICE_NAME);
-		class = class_create(THIS_MODULE, MBOX_DEVICE_NAME);
-		if (IS_ERR(class)) {
-			dev_err(&pdev->dev, "failed to create %s class\n",
-				MBOX_DEVICE_NAME);
-			mutex_unlock(&class_mutex);
-			return -EFAULT;
-		}
-	}
-	instance = num_clients;
-	num_clients++;
-	mutex_unlock(&class_mutex);
-
 	tdev = kmalloc(sizeof(*tdev), GFP_KERNEL);
-	if (!tdev) {
-		ret = -ENOMEM;
-		goto fail_dev;
-	}
+	if (!tdev)
+		return -ENOMEM;
 
-	ret = mbox_client_dev_init(tdev, pdev, instance);
+	ret = mbox_client_dev_init(tdev, pdev);
 	if (ret)
 		goto fail_init;
 
@@ -501,12 +482,6 @@ static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
 	return 0;
 fail_init:
 	kfree(tdev);
-fail_dev:
-	mutex_lock(&class_mutex);
-	num_clients--;
-	if (num_clients == 0)
-		class_destroy(class);
-	mutex_unlock(&class_mutex);
 	return ret;
 }
 
@@ -520,18 +495,10 @@ static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
 	for (i = tdev->num_chans - 1; i >= 0; --i)
 		mbox_chan_dev_destroy(&tdev->chans[i]);
 
+	atomic_dec(&num_clients);
 	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
 	kfree(tdev->chans);
 	kfree(tdev);
-
-	mutex_lock(&class_mutex);
-	num_clients--;
-	if (num_clients == 0) {
-		dev_info(&pdev->dev, "Final instance, destroying %s class...\n",
-			 MBOX_DEVICE_NAME);
-		class_destroy(class);
-	}
-	mutex_unlock(&class_mutex);
 
 	dev_info(&pdev->dev, "unregistered\n");
 	return 0;
@@ -550,9 +517,36 @@ static struct platform_driver hpsc_mbox_userspace_driver = {
 	.probe  = hpsc_mbox_userspace_probe,
 	.remove = hpsc_mbox_userspace_remove,
 };
-module_platform_driver(hpsc_mbox_userspace_driver);
+
+static int __init hpsc_mbox_userspace_init(void)
+{
+	int ret;
+	pr_info("hpsc-mbox-userspace: init\n");
+	class = class_create(THIS_MODULE, MBOX_DEVICE_NAME);
+	if (IS_ERR(class)) {
+		pr_err("hpsc-mbox-userspace: failed to create %s class\n",
+		       MBOX_DEVICE_NAME);
+		return PTR_ERR(class);
+	}
+	ret = platform_driver_register(&hpsc_mbox_userspace_driver);
+	if (ret) {
+		pr_err("hpsc-mbox-userspace: failed to register driver\n");
+		class_destroy(class);
+	}
+	return ret;
+}
+
+static void __exit hpsc_mbox_userspace_exit(void)
+{
+	pr_info("hpsc-mbox-userspace: exit\n");
+	platform_driver_unregister(&hpsc_mbox_userspace_driver);
+	class_destroy(class);
+}
 
 MODULE_DESCRIPTION("HPSC mailbox userspace interface");
 MODULE_AUTHOR("Alexei Colin <acolin@isi.edu>");
 MODULE_AUTHOR("Connor Imes <cimes@isi.edu>");
 MODULE_LICENSE("GPL v2");
+
+module_init(hpsc_mbox_userspace_init);
+module_exit(hpsc_mbox_userspace_exit);
