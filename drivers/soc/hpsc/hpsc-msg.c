@@ -3,32 +3,43 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 
-#define MSG_PAYLOAD_OFFSET 4
-#define MSG_PAYLOAD_SIZE (HPSC_MSG_SIZE - 4)
-
-static void msg_send(enum hpsc_msg_type t, const void *payload, size_t psz)
+static int msg_send(enum hpsc_msg_type t, const void *payload, size_t psz)
 {
 	// create message buffer, populate it, then send
 	HPSC_MSG_DEFINE(msg);
-	BUG_ON(psz > MSG_PAYLOAD_SIZE);
+	BUG_ON(psz > HPSC_MSG_PAYLOAD_SIZE);
 	msg[0] = t;
-	memcpy(&msg[MSG_PAYLOAD_OFFSET], payload, psz);
-	hpsc_notif_send(msg, sizeof(msg));
+	if (payload)
+		memcpy(&msg[HPSC_MSG_PAYLOAD_OFFSET], payload, psz);
+	return hpsc_notif_send(msg, sizeof(msg));
 }
 
-void hpsc_msg_ping(unsigned int id)
-{
-	// payload is the ping ID
-	msg_send(PING, &id, sizeof(id));
-}
-EXPORT_SYMBOL_GPL(hpsc_msg_ping);
-
-void hpsc_msg_wdt_timeout(unsigned int cpu)
+int hpsc_msg_wdt_timeout(unsigned int cpu)
 {
 	// payload is the ID of the CPU that timed out
-	msg_send(PING, &cpu, sizeof(cpu));
+	pr_info("hpsc_msg_wdt_timeout: %u\n", cpu);
+	return msg_send(PING, &cpu, sizeof(cpu));
 }
 EXPORT_SYMBOL_GPL(hpsc_msg_wdt_timeout);
+
+int hpsc_msg_lifecycle(enum hpsc_msg_lifecycle_status status, const char* info)
+{
+	// payload is the status enumeration and a string of debug data
+	struct hpsc_msg_lifeycle_payload p = {
+		.status = status,
+		.info = {0}
+	};
+	if (info)
+		strncpy(p.info, info,
+			FIELD_SIZEOF(struct hpsc_msg_lifeycle_payload, info));
+	pr_info("hpsc_msg_lifecycle: %d: %s\n", p.status, p.info);
+	return msg_send(LIFECYCLE, &p, sizeof(p));
+}
+EXPORT_SYMBOL_GPL(hpsc_msg_lifecycle);
+
+/*
+ * The remainder of this file is for processing received messages.
+ */
 
 static void msgcpy(unsigned char *dest, const unsigned char* src)
 {
@@ -94,6 +105,7 @@ static int (* const msg_cbs[HPSC_MSG_TYPE_COUNT])(const unsigned char *msg) = {
 	msg_cb_drop,		// WRITE_ADDR
 	msg_cb_drop,		// WATCHDOG_TIMEOUT
 	msg_cb_drop,		// FAULT
+	msg_cb_drop,		// LIFECYCLE
 	msg_cb_drop,		// ACTION
 };
 
