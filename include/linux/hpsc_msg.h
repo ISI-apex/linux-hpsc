@@ -1,9 +1,16 @@
+/*
+ * HPSC messaging interface.
+ * Provides helper functions to send different types of messages.
+ * Also provides a callback function for processing received messages.
+ */
 #ifndef __HPSC_MSG_H
 #define __HPSC_MSG_H
 
 #include <linux/types.h>
 
 #define HPSC_MSG_SIZE 64
+#define HPSC_MSG_PAYLOAD_OFFSET 4
+#define HPSC_MSG_PAYLOAD_SIZE (HPSC_MSG_SIZE - 4)
 
 #define HPSC_MSG_DEFINE(name) unsigned char name[HPSC_MSG_SIZE] = {0}
 
@@ -27,18 +34,40 @@ enum hpsc_msg_type {
 	// notifications
 	WATCHDOG_TIMEOUT,
 	FAULT,
+	LIFECYCLE,
 	// an enumerated/predefined action
 	ACTION,
 	// enum counter
 	HPSC_MSG_TYPE_COUNT
 };
 
+enum hpsc_msg_lifecycle_status {
+	LIFECYCLE_UP,
+	LIFECYCLE_DOWN
+};
+
+// info is for debugging, use real data types if we need more detail
+struct hpsc_msg_lifeycle_payload {
+	u32 status;
+	char info[HPSC_MSG_PAYLOAD_SIZE - sizeof(u32)];
+};
+
 /**
  * Send a message that a watchdog timed out.
  *
  * @param cpu The CPU whose watchdog timed out
+ * @return 0 on success, a negative error code otherwise
  */
-void hpsc_msg_wdt_timeout(unsigned int cpu);
+int hpsc_msg_wdt_timeout(unsigned int cpu);
+
+/**
+ * Send a message indicating a change in lifecycle
+ *
+ * @param status The new status
+ * @param infp Optional extra info
+ * @return 0 on success, a negative error code otherwise
+ */
+int hpsc_msg_lifecycle(enum hpsc_msg_lifecycle_status status, const char* info);
 
 /**
  * Process a received messaged. Should only be called by hpsc-notif.
