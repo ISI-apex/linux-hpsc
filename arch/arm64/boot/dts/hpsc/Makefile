@@ -1,4 +1,4 @@
-dtb-$(CONFIG_ARCH_ZYNQMP) += hpsc.dtb
+dtb-$(CONFIG_ARCH_HPSC) += hpsc.dtb
 
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
