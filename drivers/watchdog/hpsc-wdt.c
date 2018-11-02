@@ -61,11 +61,28 @@ static int hpsc_wdt_start(struct watchdog_device *wdog)
 static int hpsc_wdt_stop(struct watchdog_device *wdog)
 {
 	struct hpsc_wdt *wdt = watchdog_get_drvdata(wdog);
+	unsigned long flags;
 	dev_info(wdt->dev, "stop\n");
+	spin_lock_irqsave(&wdt->lock, flags);
 	// TODO
 #ifdef HPSC_WDT_USE_SW_TIMER
 	del_timer(&wdt->timer);
 #endif
+	spin_unlock_irqrestore(&wdt->lock, flags);
+	return 0;
+}
+
+static int hpsc_wdt_ping(struct watchdog_device *wdog)
+{
+	struct hpsc_wdt *wdt = watchdog_get_drvdata(wdog);
+	unsigned long flags;
+	dev_info(wdt->dev, "ping\n");
+	spin_lock_irqsave(&wdt->lock, flags);
+	// TODO
+#ifdef HPSC_WDT_USE_SW_TIMER
+	mod_timer(&wdt->timer, jiffies+(wdog->timeout*HZ));
+#endif
+	spin_unlock_irqrestore(&wdt->lock, flags);
 	return 0;
 }
 
@@ -74,6 +91,9 @@ static int hpsc_wdt_set_timeout(struct watchdog_device *wdog, unsigned int t)
 	struct hpsc_wdt *wdt = watchdog_get_drvdata(wdog);
 	dev_info(wdt->dev, "set_timeout=%u\n", t);
 	wdog->timeout = t;
+	// TODO
+	// Per the API, return -EINVAL if timeout is out of range,
+	// -EIO if we fail to write to hardware
 	return 0;
 }
 
@@ -81,6 +101,7 @@ static struct watchdog_ops hpsc_wdt_ops = {
 	.owner =	THIS_MODULE,
 	.start =	hpsc_wdt_start,
 	.stop =		hpsc_wdt_stop,
+	.ping =		hpsc_wdt_ping,
 	.set_timeout =	hpsc_wdt_set_timeout,
 };
 
