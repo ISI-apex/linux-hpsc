@@ -11,7 +11,7 @@
  * published by the Free Software Foundation; either version 2 of
  * the License, or (at your option) any later version.
  */
-#define HPSC_NEW_GIC
+
 / {
 	compatible = "xlnx,zynqmp";
 	#address-cells = <2>;
@@ -21,39 +21,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		cpu-map {
-			cluster0 {
-				core0 {
-					cpu = <&cpub0>;
-				};
-				core1 {
-					cpu = <&cpub1>;
-				};
-				core2 {
-					cpu = <&cpub2>;
-				};
-				core3 {
-					cpu = <&cpub3>;
-				};
-			};
-
-			cluster1 {
-				core0 {
-					cpu = <&cpul0>;
-				};
-				core1 {
-					cpu = <&cpul1>;
-				};
-				core2 {
-					cpu = <&cpul2>;
-				};
-				core3 {
-					cpu = <&cpul3>;
-				};
-			};
-		};
-         
-		cpul0: cpu@0 {
+		cpu@0 {
 			compatible = "arm,cortex-a53", "arm,armv8";
 			device_type = "cpu";
 			enable-method = "psci";
@@ -62,7 +30,7 @@
 			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
-		cpul1: cpu@1 {
+		cpu@1 {
 			compatible = "arm,cortex-a53", "arm,armv8";
 			device_type = "cpu";
 			enable-method = "psci";
@@ -71,7 +39,7 @@
 			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
-		cpul2: cpu@2 {
+		cpu@2 {
 			compatible = "arm,cortex-a53", "arm,armv8";
 			device_type = "cpu";
 			enable-method = "psci";
@@ -80,44 +48,12 @@
 			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
-		cpul3: cpu@3 {
+		cpu@3 {
 			compatible = "arm,cortex-a53", "arm,armv8";
 			device_type = "cpu";
 			enable-method = "psci";
 			reg = <0x3>;
 			operating-points-v2 = <&cpu_opp_table>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
-		};
-
-		cpub0: cpu@100 {
-			compatible = "arm,cortex-a53", "arm,armv8";
-			device_type = "cpu";
-			enable-method = "psci";
-			reg = <0x100>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
-		};
-
-		cpub1: cpu@101 {
-			compatible = "arm,cortex-a53", "arm,armv8";
-			device_type = "cpu";
-			enable-method = "psci";
-			reg = <0x101>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
-		};
-
-		cpub2: cpu@102 {
-			compatible = "arm,cortex-a53", "arm,armv8";
-			device_type = "cpu";
-			enable-method = "psci";
-			reg = <0x102>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
-		};
-
-		cpub3: cpu@103 {
-			compatible = "arm,cortex-a53", "arm,armv8";
-			device_type = "cpu";
-			enable-method = "psci";
-			reg = <0x103>;
 			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
@@ -341,14 +277,7 @@
 		interrupts = <0 143 4>,
 			     <0 144 4>,
 			     <0 145 4>,
-			     <0 146 4>,
-			     <0 147 4>,
-			     <0 148 4>,
-			     <0 149 4>,
-			     <0 150 4>;
-		interrupt-affinity = <&cpul0>, <&cpul1>, <&cpul2>,
-				     <&cpul3>, <&cpub0>, <&cpub1>,
-				     <&cpub2>, <&cpub3>;
+			     <0 146 4>;
 	};
 
 	psci {
@@ -423,20 +352,6 @@
 		#size-cells = <1>;
 		ranges = <0 0 0 0 0xffffffff>;
 
-#ifdef HPSC_NEW_GIC
-		gic: interrupt-controller@f9000000 {
-			compatible = "arm,gic-v3"; 
-/*			compatible = "arm,gic-400", "arm,cortex-a15-gic";
-			compatible = "arm,gic-500"; */ /* DK: with this, kernel cannot find interrupt contoller */
-			#interrupt-cells = <3>;
-			#redistributor-regions = <1>;
-			reg = <0x0 0xf9000000 0x20000>,
-			      <0x0 0xf9100000 0x100000>;
-			interrupt-controller;
-/*			interrupt-parent = <&gic>; */ /* DK: no change */
-			interrupts = <1 9 0xf04>;
-		};
-#else
 		gic: interrupt-controller@f9010000 {
 			compatible = "arm,gic-400", "arm,cortex-a15-gic";
 			#interrupt-cells = <3>;
@@ -448,7 +363,6 @@
 			interrupt-parent = <&gic>;
 			interrupts = <1 9 0xf04>;
 		};
-#endif
 	};
 
 	amba: amba {
