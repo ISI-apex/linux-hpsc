@@ -17,19 +17,6 @@
 // TODO: SW timer to be replaced by HW watchdog stage 1 timer interrupt
 #define HPSC_WDT_USE_SW_TIMER
 
-#ifdef HPSC_WDT_USE_SW_TIMER
-#include <linux/jiffies.h>
-#include <linux/timer.h>
-#include <linux/hpsc_msg.h>
-static unsigned int hpsc_wdt_dummy_cpu_ctr = 0;
-static void hpsc_wdt_timeout(unsigned long data) {
-	pr_info("HPSC Chiplet watchdog expired for cpu %lu\n", data);
-	hpsc_msg_wdt_timeout((unsigned int) data);
-	pr_crit("Initiating poweroff\n");
-	orderly_poweroff(true);
-}
-#endif
-
 struct hpsc_wdt {
 	struct watchdog_device	wdd;
 	spinlock_t		lock;
@@ -37,9 +24,24 @@ struct hpsc_wdt {
 	void __iomem		*base;
 	unsigned int		cpu;
 #ifdef HPSC_WDT_USE_SW_TIMER
-	struct timer_list	timer;
+	struct hrtimer		timer;
 #endif
 };
+
+#ifdef HPSC_WDT_USE_SW_TIMER
+#include <linux/hrtimer.h>
+#include <linux/hpsc_msg.h>
+static unsigned int hpsc_wdt_dummy_cpu_ctr = 0;
+static enum hrtimer_restart hpsc_wdt_timeout(struct hrtimer *timer)
+{
+	struct hpsc_wdt *wdt = container_of(timer, struct hpsc_wdt, timer);
+	pr_info("HPSC Chiplet watchdog expired for cpu %d\n", wdt->cpu);
+	hpsc_msg_wdt_timeout(wdt->cpu);
+	pr_crit("Initiating poweroff\n");
+	orderly_poweroff(true);
+	return HRTIMER_NORESTART;
+}
+#endif
 
 static int hpsc_wdt_start(struct watchdog_device *wdog)
 {
@@ -49,7 +51,8 @@ static int hpsc_wdt_start(struct watchdog_device *wdog)
 	spin_lock_irqsave(&wdt->lock, flags);
 	// TODO
 #ifdef HPSC_WDT_USE_SW_TIMER
-	mod_timer(&wdt->timer, jiffies+(wdog->timeout*HZ));
+	hrtimer_start(&wdt->timer, ktime_set(wdog->timeout, 0),
+		      HRTIMER_MODE_REL);
 #endif
 	spin_unlock_irqrestore(&wdt->lock, flags);
 	return 0;
@@ -64,7 +67,7 @@ static int hpsc_wdt_stop(struct watchdog_device *wdog)
 	spin_lock_irqsave(&wdt->lock, flags);
 	// TODO
 #ifdef HPSC_WDT_USE_SW_TIMER
-	del_timer(&wdt->timer);
+	hrtimer_cancel(&wdt->timer);
 #endif
 	spin_unlock_irqrestore(&wdt->lock, flags);
 	return 0;
@@ -78,7 +81,10 @@ static int hpsc_wdt_ping(struct watchdog_device *wdog)
 	spin_lock_irqsave(&wdt->lock, flags);
 	// TODO
 #ifdef HPSC_WDT_USE_SW_TIMER
-	mod_timer(&wdt->timer, jiffies+(wdog->timeout*HZ));
+	// don't restart an expired timer
+	if (hrtimer_active(&wdt->timer))
+		hrtimer_start(&wdt->timer, ktime_set(wdog->timeout, 0),
+			      HRTIMER_MODE_REL);
 #endif
 	spin_unlock_irqrestore(&wdt->lock, flags);
 	return 0;
@@ -145,8 +151,9 @@ static int hpsc_wdt_probe(struct platform_device *pdev)
 	wdt->cpu = 0;
 
 #ifdef HPSC_WDT_USE_SW_TIMER
-	setup_timer(&wdt->timer, hpsc_wdt_timeout, hpsc_wdt_dummy_cpu_ctr);
-	hpsc_wdt_dummy_cpu_ctr++;
+	wdt->cpu = hpsc_wdt_dummy_cpu_ctr++;
+	hrtimer_init(&wdt->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	wdt->timer.function = hpsc_wdt_timeout;
 #endif
 
 	base = of_iomap(dev->of_node, 0);
