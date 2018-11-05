@@ -11,6 +11,8 @@ static int msg_send(enum hpsc_msg_type t, const void *payload, size_t psz)
 	msg[0] = t;
 	if (payload)
 		memcpy(&msg[HPSC_MSG_PAYLOAD_OFFSET], payload, psz);
+	print_hex_dump_bytes("msg_send", DUMP_PREFIX_ADDRESS, msg,
+			     HPSC_MSG_SIZE);
 	return hpsc_notif_send(msg, sizeof(msg));
 }
 
@@ -18,7 +20,7 @@ int hpsc_msg_wdt_timeout(unsigned int cpu)
 {
 	// payload is the ID of the CPU that timed out
 	pr_info("hpsc_msg_wdt_timeout: %u\n", cpu);
-	return msg_send(PING, &cpu, sizeof(cpu));
+	return msg_send(WATCHDOG_TIMEOUT, &cpu, sizeof(cpu));
 }
 EXPORT_SYMBOL_GPL(hpsc_msg_wdt_timeout);
 

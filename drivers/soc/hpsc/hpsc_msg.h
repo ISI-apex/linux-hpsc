@@ -12,7 +12,7 @@
 #define HPSC_MSG_PAYLOAD_OFFSET 4
 #define HPSC_MSG_PAYLOAD_SIZE (HPSC_MSG_SIZE - 4)
 
-#define HPSC_MSG_DEFINE(name) unsigned char name[HPSC_MSG_SIZE] = {0}
+#define HPSC_MSG_DEFINE(name) u8 name[HPSC_MSG_SIZE] = {0}
 
 // Message type enumeration
 enum hpsc_msg_type {
