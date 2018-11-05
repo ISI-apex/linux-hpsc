@@ -81,18 +81,24 @@ static int hpsc_mbox_kernel_send(struct notifier_block *nb,
 	struct mbox_client_dev *tdev = container_of(nb, struct mbox_client_dev, nb);
 	struct mbox_chan_dev *cdev = &tdev->chans[DT_MBOX_OUT];
 	int ret;
-	pr_info("HPSC mbox kernel: send\n");
+	dev_info(tdev->dev, "send\n");
 	spin_lock(&cdev->lock);
 	if (!cdev->send_ack) {
 		// previous message not yet ack'd
-		ret = -EAGAIN;
+		ret = NOTIFY_STOP_MASK | EAGAIN;
 		goto send_out;
 	}
 	ret = mbox_send_message(cdev->channel, msg);
-	if (ret >= 0)
+	if (ret >= 0) {
 		cdev->send_ack = false;
-	else
+		ret = NOTIFY_STOP;
+	} else if (ret == -EAGAIN) {
+		ret = NOTIFY_STOP_MASK | EAGAIN;
+	} else {
 		dev_err(tdev->dev, "Failed to send mailbox message: %d\n", ret);
+		// need the positive error code value
+		ret = -ret;
+	}
 send_out:
 	spin_unlock(&cdev->lock);
 	return ret;
