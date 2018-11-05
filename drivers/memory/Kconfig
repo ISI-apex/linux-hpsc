@@ -121,7 +121,7 @@ config FSL_IFC
 config PL35X_SMC
 	bool "ARM PL35X Static Memory Controller(SMC) driver"
 	default y
-	depends on ARM
+	depends on ARM || ARM64
 	help
 	  This driver is for the ARM PL351/PL353 Static Memory
 	  Controller(SMC) module.

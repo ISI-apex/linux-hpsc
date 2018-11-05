@@ -145,6 +145,10 @@
 	clocks = <&clk600>, <&clk100>;
 };
 
+&smcc{
+	clocks = <&clk100 &clk100>;
+};
+
 &nand0 {
 	clocks = <&clk100 &clk100>;
 };
