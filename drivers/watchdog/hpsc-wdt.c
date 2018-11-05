@@ -23,12 +23,10 @@
 #include <linux/hpsc_msg.h>
 static unsigned int hpsc_wdt_dummy_cpu_ctr = 0;
 static void hpsc_wdt_timeout(unsigned long data) {
-	module_put(THIS_MODULE);
 	pr_info("HPSC Chiplet watchdog expired for cpu %lu\n", data);
 	hpsc_msg_wdt_timeout((unsigned int) data);
-	pr_crit("Initiating system reboot\n");
-	emergency_restart();
-	pr_crit("Reboot didn't ?????\n");
+	pr_crit("Initiating poweroff\n");
+	orderly_poweroff(true);
 }
 #endif
 
@@ -76,7 +74,7 @@ static int hpsc_wdt_ping(struct watchdog_device *wdog)
 {
 	struct hpsc_wdt *wdt = watchdog_get_drvdata(wdog);
 	unsigned long flags;
-	dev_info(wdt->dev, "ping\n");
+	dev_dbg(wdt->dev, "ping\n");
 	spin_lock_irqsave(&wdt->lock, flags);
 	// TODO
 #ifdef HPSC_WDT_USE_SW_TIMER
