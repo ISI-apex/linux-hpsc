@@ -1,3 +1,4 @@
+#include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/hpsc_msg.h>
 #include <linux/hpsc_notif.h>
@@ -5,39 +6,34 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
-#include <linux/spinlock.h>
 
-// Messages may be sent or received during interrupts or other critical times
-// when sleeping isn't allowed. Therefore, we must use a spinlock, not a mutex.
-static DEFINE_SPINLOCK(notif_lock);
-static struct notifier_block *handlers[HPSC_NOTIF_PRIORITY_COUNT];
+#define RETRIES_DEFAULT 10
+static unsigned int retries = RETRIES_DEFAULT;
+module_param(retries, uint, 0);
+MODULE_PARM_DESC(retries,
+	"Number of retry attempts, default=" __MODULE_STRING(RETRIES_DEFAULT));
+
+#define RETRY_DELAY_US 100
+static unsigned long retry_delay_us = RETRY_DELAY_US;
+module_param(retry_delay_us, ulong, 0);
+MODULE_PARM_DESC(retries,
+	"Microsecond delay between retries, default="
+	__MODULE_STRING(RETRY_DELAY_US));
+
+static ATOMIC_NOTIFIER_HEAD(notif_handlers);
+
 
 int hpsc_notif_register(struct notifier_block *nb)
 {
-	int ret = 0;
 	pr_info("hpsc-notif: registering handler type: %d\n", nb->priority);
-	BUG_ON(nb->priority < 0 || nb->priority >= HPSC_NOTIF_PRIORITY_COUNT);
-	spin_lock(&notif_lock);
-	if (handlers[nb->priority])
-		// device of this type already registered
-		ret = -EBUSY;
-	else
-		handlers[nb->priority] = nb;
-	spin_unlock(&notif_lock);
-	return ret;
+	return atomic_notifier_chain_register(&notif_handlers, nb);
 }
 EXPORT_SYMBOL_GPL(hpsc_notif_register);
 
-void hpsc_notif_unregister(struct notifier_block *nb)
+int hpsc_notif_unregister(struct notifier_block *nb)
 {
 	pr_info("hpsc-notif: unregistering handler type: %d\n", nb->priority);
-	BUG_ON(nb->priority < 0 || nb->priority >= HPSC_NOTIF_PRIORITY_COUNT);
-	spin_lock(&notif_lock);
-	if (handlers[nb->priority] == nb)
-		handlers[nb->priority] = NULL;
-	else
-		pr_warn("hpsc-notif: handler does not match type\n");
-	spin_unlock(&notif_lock);
+	return atomic_notifier_chain_unregister(&notif_handlers, nb);
 }
 EXPORT_SYMBOL_GPL(hpsc_notif_unregister);
 
@@ -51,29 +47,36 @@ int hpsc_notif_recv(const void *msg, size_t sz)
 }
 EXPORT_SYMBOL_GPL(hpsc_notif_recv);
 
-// TODO: Fall back on other handlers on send error?
-// TODO: Support retries on ret == -EAGAIN (by some policy)
 int hpsc_notif_send(void *msg, size_t sz)
 {
-	struct notifier_block *nb;
-	int i;
+	unsigned int i;
+	int nr_calls = 0;
 	int ret;
 	pr_debug("hpsc-notif: send\n");
 	BUG_ON(sz != HPSC_MSG_SIZE);
-	spin_lock(&notif_lock);
-	for (i = 0; i < HPSC_NOTIF_PRIORITY_COUNT; i++) {
-		// handlers are ordered by preference
-		nb = handlers[i];
-		if (nb) {
-			ret = nb->notifier_call(nb, 0, msg);
-			pr_info("hpsc-notif: send: result = %d\n", ret);
-			goto out;
+	for (i = 0; i <= retries; i++) {
+		ret = __atomic_notifier_call_chain(&notif_handlers, 0, msg, -1,
+						   &nr_calls);
+		if (ret == NOTIFY_STOP)
+			// normal behavior
+			return 0;
+		if (!nr_calls) {
+			pr_err("hpsc-notif: send: no handlers available!\n");
+			ret = -ENODEV;
+			break;
+		}
+		if (ret != (NOTIFY_STOP_MASK & EAGAIN)) {
+			pr_err("hpsc-notif: send: failed: %d\n", ret);
+			break;
+		}
+		if (i < retries) {
+			pr_info("hpsc-notif: send: retry %u in %lu us...\n",
+				i + 1, retry_delay_us);
+			udelay(retry_delay_us);
+		} else {
+			pr_err("hpsc-notif: send: retries exhausted\n");
 		}
 	}
-	pr_err("hpsc-notif: send: no handlers available!\n");
-	ret = -ENODEV;
-out:
-	spin_unlock(&notif_lock);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(hpsc_notif_send);
