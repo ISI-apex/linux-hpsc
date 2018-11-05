@@ -10,7 +10,6 @@
  * published by the Free Software Foundation; either version 2 of
  * the License, or (at your option) any later version.
  */
-
 / {
 	compatible = "xlnx,zynqmp";
 	#address-cells = <2>;
@@ -557,19 +556,36 @@
 			interrupts = <0 112 4>;
 		};
 
-		nand0: nand@ff100000 {
-			compatible = "arasan,nfc-v3p10";
-			status = "disabled";
-			reg = <0x0 0xff100000 0x0 0x1000>;
-			clock-names = "clk_sys", "clk_flash";
+
+		smcc: smcc-memory-controller@f92d0000 {
+			#address-cells = <2>;
+			#size-cells = <2>; 
+			status = "okay";
+			clock-names = "aclk", "memclk";
+			iommus = <&smmu 0x872>;
+			#stream-id-cells = <1>;
+			compatible = "arm,pl353-smc-r2p1";
 			interrupt-parent = <&gic>;
 			interrupts = <0 14 4>;
-			#address-cells = <2>;
-			#size-cells = <1>;
-			#stream-id-cells = <1>;
-			iommus = <&smmu 0x872>;
-			power-domains = <&pd_nand>;
+			ranges ;
+			reg = <0x0 0xf92d0000 0x0 0x1000>;
+			nand0: nand0@600000000 {
+				status = "okay";
+				compatible = "arm,pl353-nand-r2p1";
+				reg = <0x6 0x0 0x0 0x20000000>;
+				#address-cells = <0x2>; 
+				#size-cells = <0x1>; 
+				power-domains = <&pd_nand>;
+			};
+			nor0: flash@e2000000 {
+				status = "disabled";
+				compatible = "cfi-flash";
+				reg = <0x6 0x20000000 0x0 0xE0000000>;
+				#address-cells = <0x2>; 
+				#size-cells = <0x2>; 
+			};
 		};
+
 
 		gem0: ethernet@ff0b0000 {
 			compatible = "cdns,zynqmp-gem";
@@ -822,7 +838,7 @@
 					&fpd_dma_chan8 0x14ef
 					&sdhci0 0x870
 					&sdhci1 0x871
-					&nand0 0x872>;
+					&smcc 0x872>;
 		};
 
 		spi0: spi@ff040000 {
