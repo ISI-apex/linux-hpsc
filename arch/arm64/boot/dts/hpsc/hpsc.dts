@@ -366,7 +366,7 @@
 
 		hpps_mailbox: mailbox@0xf9220000 {
 			compatible = "hpsc,hpsc-mbox";
-			reg = <0x0 0xfff50000 0x0 0x40>;
+                        reg = <0x0 0xf9220000 0x0 0x40>;
 			interrupt-parent = <&gic>;
 
 			/* Define all, but only two will be used, selected by
