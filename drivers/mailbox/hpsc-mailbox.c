@@ -9,7 +9,6 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
-#include <linux/spinlock.h>
 
 #define REG_CONFIG              0x00
 #define REG_EVENT_CAUSE         0x04
@@ -44,7 +43,6 @@
 
 struct hpsc_mbox {
 	void __iomem *regs;
-	//spinlock_t lock; // TODO: should not be necessary, because can't access same device file from two cores
 	struct mbox_controller controller;
         unsigned rcv_int_idx;
         unsigned ack_int_idx;
@@ -136,7 +134,6 @@ static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
         unsigned i;
 	u32 *msg = (u32 *)data;
 
-	//spin_lock(&mbox->lock);
 	dev_dbg(mbox->controller.dev, "send: ");
         for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i) {
 	        writel(msg[i], chan->regs + REG_DATA + i * 4);
@@ -147,7 +144,6 @@ static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
 	dev_dbg(mbox->controller.dev, "set int A\n");
 	writel(HPSC_MBOX_EVENT_A, chan->regs + REG_EVENT_SET);
 
-	//spin_unlock(&mbox->lock);
 	return 0;
 }
 
@@ -174,9 +170,7 @@ static int hpsc_mbox_startup(struct mbox_chan *link)
 	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
 	struct hpsc_mbox_chan *chan = link->con_priv;
         u32 ie, owner, src, dest, config, config_claimed;
-
-        // TODO: can this also race with ISR? race through client API?
-
+	int ret = 0;
 
         // Note: owner+dest is entirely orthogonal to direction.
         // Note; owner+src+dest are entirely optional, may set both to zero in DT
@@ -220,6 +214,7 @@ static int hpsc_mbox_startup(struct mbox_chan *link)
 			dev_err(mbox->controller.dev,
 				"src/dest mismatch: %x/%x (expected %x/%x)\n",
 				src, dest, chan->src, chan->dest);
+			// TODO: roll back any changes to owner?	
 			return -EBUSY;
 		}
         }
@@ -241,8 +236,6 @@ static void hpsc_mbox_shutdown(struct mbox_chan *link)
 {
 	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
 	struct hpsc_mbox_chan *chan = link->con_priv;
-
-        // TODO: race with ISR. Also, cace through client API?
 
 	// Could just rely on HW reset-on-release behavior, but for symmetry...
 	u32 ie = readl(chan->regs + REG_INT_ENABLE);
@@ -273,26 +266,27 @@ static const struct mbox_chan_ops hpsc_mbox_chan_ops = {
 
 /* Parse the channel identifiers from client's device tree node */
 static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
-                                            const struct of_phandle_args *sp)
+					    const struct of_phandle_args *sp)
 {
-       struct mbox_chan *link;
-       struct hpsc_mbox_chan *chan;
+	struct mbox_chan *link;
+	struct hpsc_mbox_chan *chan;
 
-       if (sp->args_count != 5) {
-	       dev_err(mbox->dev, "invalid mailbox instance reference in DT node\n");
-               return NULL;
-        }
+	if (sp->args_count != 5) {
+		dev_err(mbox->dev,
+			"invalid mailbox instance reference in DT node\n");
+		return ERR_PTR(-EINVAL);
+	}
 
-       link = &mbox->chans[sp->args[0]];
+	link = &mbox->chans[sp->args[0]];
 
-       // Slightly not nice, since adding side-effects to an otherwise pure function
-       chan = (struct hpsc_mbox_chan *)link->con_priv;
-       chan->incoming = sp->args[1];
-       chan->owner = sp->args[2];
-       chan->src = sp->args[3];
-       chan->dest = sp->args[4];
+	// Slightly not nice, since adding side-effects to an otherwise pure function
+	chan = (struct hpsc_mbox_chan *)link->con_priv;
+	chan->incoming = sp->args[1];
+	chan->owner = sp->args[2];
+	chan->src = sp->args[3];
+	chan->dest = sp->args[4];
 
-       return link;
+	return link;
 }
 
 static int hpsc_mbox_probe(struct platform_device *pdev)
@@ -308,8 +302,6 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
 	mbox = devm_kzalloc(dev, sizeof(*mbox), GFP_KERNEL);
 	if (mbox == NULL)
 		return -ENOMEM;
-
-	//spin_lock_init(&mbox->lock);
 
 	mbox->controller.txdone_irq = true;
 	mbox->controller.ops = &hpsc_mbox_chan_ops;
