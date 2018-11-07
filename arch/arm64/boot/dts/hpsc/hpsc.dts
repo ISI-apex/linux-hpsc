@@ -255,7 +255,7 @@
 			compatible = "cdns,zynqmp-gem";
 			status = "okay";
 			interrupt-parent = <&gic>;
-			interrupts = <0 57 4>, <0 57 4>;
+			interrupts = <0 57 4>, <0 58 4>;
 			reg = <0x0 0xe5300000 0x0 0x1000>;
 			clocks = <&clk125>, <&clk125>, <&clk125>;
 			clock-names = "pclk", "hclk", "tx_clk";
