@@ -435,7 +435,7 @@ static int mbox_client_dev_init(struct mbox_client_dev *tdev,
 	if (tdev->num_chans < 0)
 		return -EINVAL;
 
-	tdev->chans = kmalloc_array(tdev->num_chans, sizeof(*tdev->chans), GFP_KERNEL);
+	tdev->chans = kcalloc(tdev->num_chans, sizeof(*tdev->chans), GFP_KERNEL);
 	if (tdev->chans == NULL) {
 		dev_err(&pdev->dev, "failed to alloc mailbox instance state\n");
 		return -ENOMEM;
@@ -470,7 +470,7 @@ static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "probe\n");
 
-	tdev = kmalloc(sizeof(*tdev), GFP_KERNEL);
+	tdev = kzalloc(sizeof(*tdev), GFP_KERNEL);
 	if (!tdev)
 		return -ENOMEM;
 
