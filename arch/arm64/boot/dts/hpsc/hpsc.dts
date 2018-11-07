@@ -496,7 +496,7 @@
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
 
-		srio_dma_0: dma-controller@0xe5310000 {
+		srio0_dma: dma-controller@0xe5310000 {
 			#dma-cells = <1>;
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0xe5310000 0x0 0x1000>;
@@ -506,10 +506,10 @@
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
 
-		srio_dma_1: dma-controller@0xe5320000 {
+		srio1_dma: dma-controller@0xe5330000 {
 			#dma-cells = <1>;
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
-			reg = <0x0 0xe5320000 0x0 0x1000>;
+			reg = <0x0 0xe5330000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 			interrupts = <0 67 4>, <0 68 4>;
 			clocks = <&dma_clk>;
