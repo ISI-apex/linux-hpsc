@@ -402,20 +402,7 @@
 				    <&hpps_mailbox  MBOX_HPPS_HPPS_RTPS     0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
 				    <&hpps_mailbox  MBOX_HPPS_RTPS_HPPS     0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
 				    <&hpps_mailbox  MBOX_HPPS_HPPS_OWN_TRCH MASTER_ID_HPPS_CPU0  MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&hpps_mailbox  MBOX_HPPS_TRCH_HPPS_OWN MASTER_ID_HPPS_CPU0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
-                        /* NOTE: destination is just an identifier, mboxes accessible from any core */
-                        /* names optional, if not given, dev files named 'mbox%u' by index */
-			mbox-names = "mbox_trch_out",
-                                     "mbox_trch_in",
-                                     "mbox_rtps_out",
-                                     "mbox_rtps_in",
-                                     "mbox_own_trch_out",
-                                     "mbox_own_trch_in";
-		};
-
-		mailbox_client_1 {
-			compatible = "hpsc-mbox-userspace";
-			mboxes =  /* ip block, instance index, owner, src, dest */
+				    <&hpps_mailbox  MBOX_HPPS_TRCH_HPPS_OWN MASTER_ID_HPPS_CPU0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
 				    <&hpps_mailbox  6     0                    0 0>,
 				    <&hpps_mailbox  7     0                    0 0>,
 				    <&hpps_mailbox  8     0                    0 0>,
@@ -440,6 +427,16 @@
 				    <&hpps_mailbox  27     0                    0 0>,
 				    <&hpps_mailbox  28     0                    0 0>,
 				    <&hpps_mailbox  29     0                    0 0>;
+                        /* NOTE: destination is just an identifier, mboxes accessible from any core */
+                        /* names optional, if not given, dev files named 'mbox%u' by index */
+			/*
+			mbox-names = "mbox_trch_out",
+                                     "mbox_trch_in",
+                                     "mbox_rtps_out",
+                                     "mbox_rtps_in",
+                                     "mbox_own_trch_out",
+                                     "mbox_own_trch_in";
+                        */
 		};
 
 		mailbox_kernel {
