@@ -415,32 +415,27 @@ static int mbox_client_dev_init(struct mbox_client_dev *tdev,
 	if (tdev->num_chans < 0)
 		return -EINVAL;
 
-	tdev->chans = kcalloc(tdev->num_chans, sizeof(*tdev->chans), GFP_KERNEL);
-	if (tdev->chans == NULL) {
-		dev_err(&pdev->dev, "failed to alloc mailbox instance state\n");
+	tdev->chans = devm_kcalloc(&pdev->dev, tdev->num_chans,
+				   sizeof(*tdev->chans), GFP_KERNEL);
+	if (!tdev->chans)
 		return -ENOMEM;
-	}
 
 	ret = alloc_chrdev_region(&dev, 0, tdev->num_chans, MBOX_DEVICE_NAME);
 	if (ret < 0) {
 		dev_err(tdev->dev, "failed to alloc chrdev region\n");
-		goto fail;
+		return ret;
 	}
 	tdev->major_num = MAJOR(dev);
 
 	tdev->instance = atomic_inc_return(&num_clients) - 1;
 	ret = mbox_create_dev_files(tdev);
-	if (ret)
-		goto fail_files;
+	if (ret) {
+		atomic_dec(&num_clients);
+		unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
+		return ret;
+	}
 
 	return 0;
-fail_files:
-	atomic_dec(&num_clients);
-	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
-fail:
-	kfree(tdev->chans);
-	return ret;
-
 }
 
 static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
@@ -450,19 +445,16 @@ static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "probe\n");
 
-	tdev = kzalloc(sizeof(*tdev), GFP_KERNEL);
+	tdev = devm_kzalloc(&pdev->dev, sizeof(*tdev), GFP_KERNEL);
 	if (!tdev)
 		return -ENOMEM;
 
 	ret = mbox_client_dev_init(tdev, pdev);
 	if (ret)
-		goto fail_init;
+		return ret;
 
 	dev_info(&pdev->dev, "registered\n");
 	return 0;
-fail_init:
-	kfree(tdev);
-	return ret;
 }
 
 static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
@@ -477,8 +469,6 @@ static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
 
 	atomic_dec(&num_clients);
 	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
-	kfree(tdev->chans);
-	kfree(tdev);
 
 	dev_info(&pdev->dev, "unregistered\n");
 	return 0;
