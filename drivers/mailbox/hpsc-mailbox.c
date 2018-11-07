@@ -4,6 +4,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/kernel.h>
+#include <linux/mailbox_client.h>
 #include <linux/mailbox_controller.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
@@ -138,35 +139,22 @@ static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
 	unsigned i;
 	u32 *msg = (u32 *)data;
 
-	dev_dbg(mbox->controller.dev, "send: ");
-	for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i) {
-		writel(msg[i], chan->regs + REG_DATA + i * 4);
-		dev_dbg(mbox->controller.dev, "%08X ", msg[i]);
-	}
-	dev_dbg(mbox->controller.dev, "\n");
+	if (msg) {
+		dev_dbg(mbox->controller.dev, "send: ");
+		for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i) {
+			writel(msg[i], chan->regs + REG_DATA + i * 4);
+			dev_dbg(mbox->controller.dev, "%08X ", msg[i]);
+		}
+		dev_dbg(mbox->controller.dev, "\n");
 
-	dev_dbg(mbox->controller.dev, "set int A\n");
-	writel(HPSC_MBOX_EVENT_A, chan->regs + REG_EVENT_SET);
+		dev_dbg(mbox->controller.dev, "set int A\n");
+		writel(HPSC_MBOX_EVENT_A, chan->regs + REG_EVENT_SET);
+	} else {
+		dev_dbg(mbox->controller.dev, "set int B\n");
+		writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
+	}
 
 	return 0;
-}
-
-// This function is overloaded/abused, its purpose is changed to:
-// the client notifies the controller that the client's receive
-// buffer in the kernel is free (i.e. userspace has read the message) so that
-// client can receive the next message from the remote sender. Here, the
-// controller uses this notification event to send the ack to the remote
-// sender. The remote sender is expected to not send another message
-// until getting an ACK.
-static bool hpsc_mbox_peek_data(struct mbox_chan *link)
-{
-	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
-	struct hpsc_mbox_chan *chan = link->con_priv;
-
-	dev_dbg(mbox->controller.dev, "client notified of receipt: set int B\n");
-	writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
-
-	return false;
 }
 
 static int hpsc_mbox_startup(struct mbox_chan *link)
@@ -223,11 +211,12 @@ static int hpsc_mbox_startup(struct mbox_chan *link)
 	}
 
 	ie = readl(chan->regs + REG_INT_ENABLE);
-	if (chan->incoming) {
+	// only enable interrupts if our client can handle them
+	// otherwise, another entity is expected to process the interrupts
+	if (link->cl->rx_callback)
 		ie |= HPSC_MBOX_INT_A(mbox->rcv_int_idx);
-	} else { // TX
+	if (link->cl->tx_done)
 		ie |= HPSC_MBOX_INT_B(mbox->ack_int_idx);
-	}
 	dev_dbg(mbox->controller.dev, "instance %u int_enable <- %08x (rcv)\n",
 			chan->instance, ie);
 	writel(ie, chan->regs + REG_INT_ENABLE);
@@ -242,11 +231,8 @@ static void hpsc_mbox_shutdown(struct mbox_chan *link)
 
 	// Could just rely on HW reset-on-release behavior, but for symmetry...
 	u32 ie = readl(chan->regs + REG_INT_ENABLE);
-	if (chan->incoming) {
-		ie &= ~HPSC_MBOX_INT_A(mbox->rcv_int_idx);
-	} else { // TX
-		ie &= ~HPSC_MBOX_INT_B(mbox->ack_int_idx);
-	}
+	ie &= ~HPSC_MBOX_INT_A(mbox->rcv_int_idx);
+	ie &= ~HPSC_MBOX_INT_B(mbox->ack_int_idx);
 	dev_dbg(mbox->controller.dev, "instance %u int_enable <- %08x (rcv)\n",
 			chan->instance, ie);
 	writel(ie, chan->regs + REG_INT_ENABLE);
@@ -263,7 +249,6 @@ static const struct mbox_chan_ops hpsc_mbox_chan_ops = {
 	.startup	= hpsc_mbox_startup,
 	.shutdown	= hpsc_mbox_shutdown,
 	.send_data	= hpsc_mbox_send_data,
-	.peek_data 	= hpsc_mbox_peek_data,
 };
 
 /* Parse the channel identifiers from client's device tree node */

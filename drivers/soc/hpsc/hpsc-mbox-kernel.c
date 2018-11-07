@@ -53,10 +53,8 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 				     HPSC_MBOX_MSG_LEN);
 	} else {
 		hpsc_notif_recv(msg, HPSC_MBOX_MSG_LEN);
-		// NOTE: yes, this is abuse of the method, but otherwise we need to
-		// add another method to the interface.
 		// Tell the controller to issue the ACK.
-		mbox_client_peek_data(cdev->channel);
+		mbox_send_message(cdev->channel, NULL);
 	}
 	spin_unlock(&cdev->lock);
 }
@@ -136,20 +134,23 @@ static int hpsc_mbox_verify_chan_cfg(struct mbox_client_dev *tdev)
 	return 0;
 }
 
-static void hpsc_mbox_kernel_init(struct mbox_client *cl, struct device *dev)
+static void hpsc_mbox_kernel_init(struct mbox_client *cl, struct device *dev,
+				  bool incoming)
 {
 	cl->dev = dev;
-	cl->rx_callback = client_rx_callback;
-	cl->tx_done = client_tx_done;
+	if (incoming)
+		cl->rx_callback = client_rx_callback;
+	else
+		cl->tx_done = client_tx_done;
 	cl->tx_block = false;
 	cl->knows_txdone = false;
 }
 
 static void hpsc_mbox_chan_dev_init(struct mbox_chan_dev *cdev,
-				    struct mbox_client_dev *tdev)
+				    struct mbox_client_dev *tdev, bool incoming)
 {
 	cdev->tdev = tdev;
-	hpsc_mbox_kernel_init(&cdev->client, tdev->dev);
+	hpsc_mbox_kernel_init(&cdev->client, tdev->dev, incoming);
 	spin_lock_init(&cdev->lock);
 	cdev->channel = NULL;
 	cdev->send_ack = true;
@@ -176,7 +177,7 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
-		hpsc_mbox_chan_dev_init(&tdev->chans[i], tdev);
+		hpsc_mbox_chan_dev_init(&tdev->chans[i], tdev, i);
 
 	// We must delay processing of pending messages until we've registered
 	// with notif handler, which requires all channels to be open.
