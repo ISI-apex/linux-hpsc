@@ -277,6 +277,7 @@
 			};
 		};
 
+#if 0 /* TODO */
 		pcie: pcie@0xe5330000 {
 			compatible = "xlnx,nwl-pcie-2.11";
 			status = "okay";
@@ -311,6 +312,7 @@
 				#interrupt-cells = <1>;
 			};
 		};
+#endif
 
 #if 0 /* TODO: this is MMU near nic7 */
 		smmu: smmu@fd800000 {
