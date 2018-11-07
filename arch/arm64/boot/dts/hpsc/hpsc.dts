@@ -346,7 +346,7 @@
 			power-domains = <&pd_uart0>;
 		};
 
-		hpps_mailbox: mailbox@0xfff50000 {
+		trch_mbox: mailbox@0xfff50000 {
 			compatible = "hpsc,hpsc-mbox";
                         reg = <0x0 0xfff50000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
@@ -364,8 +364,8 @@
 
 			/* Map all instances onto one pair of IRQs,
 			 * this pair must be not be used by other subsystems */
-			interrupt-idx-rcv = <MBOX_HPPS_HPPS_RCV_INT>;
-			interrupt-idx-ack = <MBOX_HPPS_HPPS_ACK_INT>;
+			interrupt-idx-rcv = <MBOX_HPPS_TRCH__HPPS_RCV_INT>;
+			interrupt-idx-ack = <MBOX_HPPS_TRCH__HPPS_ACK_INT>;
 
 			#mbox-cells = <4>;
                         /* instance index,
@@ -376,39 +376,55 @@
                                           if owner and, dest reg is set to this value) */
 		};
 
+		rtps_mbox: mailbox@0xfff60000 {
+			compatible = "hpsc,hpsc-mbox";
+                        reg = <0x0 0xfff60000 0x0 0x1000>;
+			interrupt-parent = <&gic>;
+
+                        interrupts = <0 203 4>, <0 204 4>, <0 205 4>, <0 206 4>,
+                                     <0 207 4>, <0 208 4>, <0 209 4>, <0 210 4>,
+                                     <0 211 4>, <0 212 4>, <0 213 4>, <0 214 4>,
+                                     <0 215 4>, <0 216 4>, <0 217 4>, <0 218 4>;
+
+			interrupt-idx-rcv = <MBOX_HPPS_RTPS__HPPS_RCV_INT>;
+			interrupt-idx-ack = <MBOX_HPPS_RTPS__HPPS_ACK_INT>;
+
+			#mbox-cells = <4>;
+		};
+
 		mailbox_client_0 {
 			compatible = "hpsc-mbox-userspace";
 			mboxes =  /* ip block, instance index, owner, src, dest */
-				    <&hpps_mailbox  MBOX_HPPS_HPPS_TRCH     0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&hpps_mailbox  MBOX_HPPS_TRCH_HPPS     0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
-				    <&hpps_mailbox  MBOX_HPPS_HPPS_RTPS     0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&hpps_mailbox  MBOX_HPPS_RTPS_HPPS     0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
-				    <&hpps_mailbox  MBOX_HPPS_HPPS_OWN_TRCH MASTER_ID_HPPS_CPU0  MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&hpps_mailbox  MBOX_HPPS_TRCH_HPPS_OWN MASTER_ID_HPPS_CPU0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
-				    <&hpps_mailbox  6     0                    0 0>,
-				    <&hpps_mailbox  7     0                    0 0>,
-				    <&hpps_mailbox  8     0                    0 0>,
-				    <&hpps_mailbox  9     0                    0 0>,
-				    <&hpps_mailbox  10     0                    0 0>,
-				    <&hpps_mailbox  11     0                    0 0>,
-				    <&hpps_mailbox  12     0                    0 0>,
-				    <&hpps_mailbox  13     0                    0 0>,
-				    <&hpps_mailbox  14     0                    0 0>,
-				    <&hpps_mailbox  15     0                    0 0>,
-				    <&hpps_mailbox  16     0                    0 0>,
-				    <&hpps_mailbox  17     0                    0 0>,
-				    <&hpps_mailbox  18     0                    0 0>,
-				    <&hpps_mailbox  19     0                    0 0>,
-				    <&hpps_mailbox  20     0                    0 0>,
-				    <&hpps_mailbox  21     0                    0 0>,
-				    <&hpps_mailbox  22     0                    0 0>,
-				    <&hpps_mailbox  23     0                    0 0>,
-				    <&hpps_mailbox  24     0                    0 0>,
-				    <&hpps_mailbox  25     0                    0 0>,
-				    <&hpps_mailbox  26     0                    0 0>,
-				    <&hpps_mailbox  27     0                    0 0>,
-				    <&hpps_mailbox  28     0                    0 0>,
-				    <&hpps_mailbox  29     0                    0 0>;
+				    <&trch_mbox  MBOX_HPPS_TRCH__HPPS_TRCH      0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
+				    <&trch_mbox  MBOX_HPPS_TRCH__TRCH_HPPS      0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
+				    <&rtps_mbox  MBOX_HPPS_RTPS__HPPS_RTPS      0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
+				    <&rtps_mbox  MBOX_HPPS_RTPS__RTPS_HPPS      0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
+				    <&trch_mbox  MBOX_HPPS_TRCH__HPPS_OWN_TRCH  MASTER_ID_HPPS_CPU0  MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
+				    <&trch_mbox  MBOX_HPPS_TRCH__TRCH_HPPS_OWN  MASTER_ID_HPPS_CPU0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
+				    <&trch_mbox   6     0                    0 0>,
+				    <&trch_mbox   7     0                    0 0>,
+				    <&trch_mbox   8     0                    0 0>,
+				    <&trch_mbox   9     0                    0 0>,
+				    <&trch_mbox  10     0                    0 0>,
+				    <&trch_mbox  11     0                    0 0>,
+				    <&trch_mbox  12     0                    0 0>,
+				    <&trch_mbox  13     0                    0 0>,
+				    <&trch_mbox  14     0                    0 0>,
+				    <&trch_mbox  15     0                    0 0>,
+				    <&trch_mbox  16     0                    0 0>,
+				    <&trch_mbox  17     0                    0 0>,
+				    <&trch_mbox  18     0                    0 0>,
+				    <&trch_mbox  19     0                    0 0>,
+				    <&trch_mbox  20     0                    0 0>,
+				    <&trch_mbox  21     0                    0 0>,
+				    <&trch_mbox  22     0                    0 0>,
+				    <&trch_mbox  23     0                    0 0>,
+				    <&trch_mbox  24     0                    0 0>,
+				    <&trch_mbox  25     0                    0 0>,
+				    <&trch_mbox  26     0                    0 0>,
+				    <&trch_mbox  27     0                    0 0>,
+				    <&trch_mbox  28     0                    0 0>,
+				    <&trch_mbox  29     0                    0 0>;
                         /* NOTE: destination is just an identifier, mboxes accessible from any core */
                         /* names optional, if not given, dev files named 'mbox%u' by index */
 			/*
@@ -424,8 +440,8 @@
 		mailbox_kernel {
 			compatible = "hpsc-mbox-kernel";
 			mboxes =  /* ip block, instance index, owner, src, dest */
-                                  <&hpps_mailbox  MBOX_HPPS_HPPS_TRCH_SSW  0	MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-                                  <&hpps_mailbox  MBOX_HPPS_TRCH_HPPS_SSW  0	MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
+                                  <&trch_mbox  MBOX_HPPS_TRCH__HPPS_TRCH_SSW  0	MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
+                                  <&trch_mbox  MBOX_HPPS_TRCH__TRCH_HPPS_SSW  0	MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
 		};
 
 		hpps_wdt0 {
