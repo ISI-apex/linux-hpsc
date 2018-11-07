@@ -308,38 +308,58 @@ static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
 	return link;
 }
 
+static void hpsc_mbox_chans_init(struct hpsc_mbox_chan *hpsc_chans,
+				 unsigned num_chans, struct hpsc_mbox *mbox,
+				 struct mbox_chan *mbox_chans)
+{
+	struct hpsc_mbox_chan *chan;
+	unsigned i;
+	for (i = 0; i < num_chans; i++) {
+		chan = &hpsc_chans[i];
+		chan->mbox = mbox;
+		chan->regs = mbox->regs + i * HPSC_MBOX_INSTANCE_REGION;
+		chan->instance = i;
+		mbox_chans[i].con_priv = chan;
+	}
+}
+
+static void hpsc_mbox_controller_init(struct mbox_controller *ctlr,
+				      struct device *dev,
+				      struct mbox_chan *chans, int num_chans)
+{
+	ctlr->dev = dev;
+	ctlr->ops = &hpsc_mbox_chan_ops;
+	ctlr->chans = chans;
+	ctlr->num_chans = num_chans;
+	ctlr->txdone_irq = true;
+	ctlr->of_xlate = &hpsc_mbox_of_xlate;
+}
+
 static int hpsc_mbox_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	int ret = 0;
-	struct resource *iomem;
+	int ret;
 	struct hpsc_mbox *mbox;
-	struct hpsc_mbox_chan *con_priv, *chan;
-	unsigned i;
-
+	struct mbox_chan *chans;
+	struct hpsc_mbox_chan *hpsc_chans;
+	struct resource *iomem;
 
 	mbox = devm_kzalloc(dev, sizeof(*mbox), GFP_KERNEL);
-	if (mbox == NULL)
+	chans = devm_kcalloc(dev, HPSC_MBOX_INSTANCES, sizeof(*chans),
+			     GFP_KERNEL);
+	hpsc_chans = devm_kcalloc(dev, HPSC_MBOX_INSTANCES, sizeof(*hpsc_chans),
+				  GFP_KERNEL);
+	if (!mbox || !chans || !hpsc_chans)
 		return -ENOMEM;
 
-	mbox->controller.txdone_irq = true;
-	mbox->controller.ops = &hpsc_mbox_chan_ops;
-	mbox->controller.of_xlate = &hpsc_mbox_of_xlate;
-	mbox->controller.dev = dev;
-	mbox->controller.num_chans = HPSC_MBOX_INSTANCES;
-	mbox->controller.chans = devm_kcalloc(dev, HPSC_MBOX_INSTANCES,
-					      sizeof(*mbox->controller.chans),
-					      GFP_KERNEL);
-	if (!mbox->controller.chans)
-		return -ENOMEM;
-
-	// Allocate space for private state as a contiguous array, to reduce overhead.
-	// Note: could also allocate on demand, but let's trade-off some memory for efficiency.
-	con_priv = devm_kcalloc(dev, mbox->controller.num_chans,
-				sizeof(*con_priv), GFP_KERNEL);
-	if (!con_priv)
-		return -ENOMEM;
-
+	// map registers
+	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	mbox->regs = devm_ioremap_resource(&pdev->dev, iomem);
+	if (IS_ERR(mbox->regs)) {
+		ret = PTR_ERR(mbox->regs);
+		dev_err(&pdev->dev, "Failed to remap mailbox regs: %d\n", ret);
+		return ret;
+	}
 
 	// Map all instances onto one pair of IRQs
 	//
@@ -347,7 +367,6 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
 	// be advanced functionality, only necessary if user desires to have
 	// multiple *groups* of mailboxes mapped to different IRQ pairs in
 	// order to achieve more isolation and to set interrupt priorities.
-
 	if (of_property_read_u32(dev->of_node, DT_PROP_INTERRUPT_IDX_RCV,
 				 &mbox->rcv_int_idx)) {
 		dev_err(dev, "Failed to read '%s' property\n",
@@ -379,7 +398,7 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(dev, "Failed to register mailbox rcv IRQ handler: %d\n",
 			ret);
-		return -ENODEV;
+		return ret;
 	}
 
 	ret = devm_request_irq(dev, mbox->ack_irqnum, hpsc_mbox_ack_irq,
@@ -387,42 +406,22 @@ static int hpsc_mbox_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(dev, "Failed to register mailbox ack IRQ handler: %d\n",
 			ret);
-		ret = -ENODEV;
-		goto fail_ack_irq;
+		return ret;
 	}
 
-	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	mbox->regs = devm_ioremap_resource(&pdev->dev, iomem);
-	if (IS_ERR(mbox->regs)) {
-		ret = PTR_ERR(mbox->regs);
-		dev_err(&pdev->dev, "Failed to remap mailbox regs: %d\n", ret);
-		goto fail_ioremap;
-	}
-
-	for (i = 0; i < mbox->controller.num_chans; ++i) {
-		chan = &con_priv[i];
-		chan->mbox = mbox;
-		chan->instance = i;
-		chan->regs = mbox->regs + i * HPSC_MBOX_INSTANCE_REGION;
-		mbox->controller.chans[i].con_priv = &con_priv[i];
-	}
-
+	// finally, register our controller with mbox API
+	hpsc_mbox_chans_init(hpsc_chans, HPSC_MBOX_INSTANCES, mbox, chans);
+	hpsc_mbox_controller_init(&mbox->controller, dev, chans,
+				  HPSC_MBOX_INSTANCES);
 	ret = mbox_controller_register(&mbox->controller);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register controller: %d\n", ret);
-		goto fail_ioremap;
+		return ret;
 	}
 
 	platform_set_drvdata(pdev, mbox);
-	dev_info(dev, "mailbox enabled\n");
+	dev_info(dev, "registered\n");
 	dev_dbg(dev, "mailbox dynamic debug enabled\n");
-
-	return ret;
-
-fail_ioremap:
-	devm_free_irq(dev, mbox->ack_irqnum, mbox);
-fail_ack_irq:
-	devm_free_irq(dev, mbox->rcv_irqnum, mbox);
 	return ret;
 }
 
@@ -430,8 +429,7 @@ static int hpsc_mbox_remove(struct platform_device *pdev)
 {
 	struct hpsc_mbox *mbox = platform_get_drvdata(pdev);
 	mbox_controller_unregister(&mbox->controller);
-	devm_free_irq(&pdev->dev, mbox->ack_irqnum, mbox);
-	devm_free_irq(&pdev->dev, mbox->rcv_irqnum, mbox);
+	dev_info(&pdev->dev, "unregistered\n");
 	return 0;
 }
 
