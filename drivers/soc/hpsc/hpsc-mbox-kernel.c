@@ -104,32 +104,14 @@ send_out:
 
 static int hpsc_mbox_verify_chan_cfg(struct mbox_client_dev *tdev)
 {
-	struct of_phandle_args spec;
-	int num_chans;
-	int i;
 	// there must be exactly 2 channels - 1 out, 1 in
-	num_chans = of_count_phandle_with_args(tdev->dev->of_node,
-					       DT_MBOXES_PROP, DT_MBOXES_CELLS);
+	int num_chans = of_count_phandle_with_args(tdev->dev->of_node,
+						   DT_MBOXES_PROP,
+						   DT_MBOXES_CELLS);
 	if (num_chans != DT_MBOXES_COUNT) {
 		dev_err(tdev->dev, "Num instances in '%s' property != %d: %d\n",
 			DT_MBOXES_PROP, DT_MBOXES_COUNT, num_chans);
 		return -EINVAL;
-	}
-	// check channel ordering - index 0 is outbound and index 1 is inbound
-	for (i = 0; i < DT_MBOXES_COUNT; i++) {
-		if (of_parse_phandle_with_args(tdev->dev->of_node,
-					       DT_MBOXES_PROP, DT_MBOXES_CELLS,
-					       i, &spec)) {
-			dev_err(tdev->dev, "Can't parse '%s' property\n",
-				DT_MBOXES_PROP);
-			return -EINVAL;
-		}
-		of_node_put(spec.np);
-		if (i != spec.args[1]) {
-			dev_err(tdev->dev, "First '%s' entry must be outbound, second must be inbound\n",
-				DT_MBOXES_PROP);
-			return -EINVAL;
-		}
 	}
 	return 0;
 }
