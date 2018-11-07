@@ -58,7 +58,6 @@ struct hpsc_mbox_chan {
 
 	// Config from DT, stays constant
 	unsigned instance;
-	bool incoming;
 	unsigned owner;
 	unsigned src;
 	unsigned dest;
@@ -157,68 +156,107 @@ static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
 	return 0;
 }
 
-static int hpsc_mbox_startup(struct mbox_chan *link)
+static int hpsc_mbox_maybe_claim_owner(struct hpsc_mbox_chan *chan)
 {
-	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
-	struct hpsc_mbox_chan *chan = link->con_priv;
-	u32 ie, owner, src, dest, config, config_claimed;
-
-	// Note: owner+dest is entirely orthogonal to direction.
-	// Note; owner+src+dest are entirely optional, may set both to zero in DT
-	// Note: owner/src/dest access is not enforced by HW, it can only
-	//       serve as a mild sanity check.
+	u32 config;
+	u32 config_claimed;
 	if (chan->owner) {
 		config = ((chan->owner << REG_CONFIG__OWNER__SHIFT)
 				& REG_CONFIG__OWNER__MASK) |
-			((chan->src << REG_CONFIG__SRC__SHIFT)
+			 ((chan->src << REG_CONFIG__SRC__SHIFT)
 				& REG_CONFIG__SRC__MASK) |
-			((chan->dest << REG_CONFIG__DEST__SHIFT)
+			 ((chan->dest << REG_CONFIG__DEST__SHIFT)
 				& REG_CONFIG__DEST__MASK) |
-			REG_CONFIG__UNSECURE;
+			 REG_CONFIG__UNSECURE;
 
-		dev_dbg(mbox->controller.dev, "set config: %p <- %x\n",
+		dev_dbg(chan->mbox->controller.dev, "set config: %p <- %x\n",
 			chan->regs + REG_CONFIG, config);
 		writel(config, chan->regs + REG_CONFIG);
 
 		config_claimed = readl(chan->regs + REG_CONFIG);
-		dev_dbg(mbox->controller.dev, "read config: %p <- %x\n",
+		dev_dbg(chan->mbox->controller.dev, "read config: %p <- %x\n",
 			chan->regs + REG_CONFIG, config_claimed);
 		if (config_claimed != config) {
-			dev_dbg(mbox->controller.dev,
+			dev_err(chan->mbox->controller.dev,
 				"failed to claim mbox: config %x != %x\n",
 				config, config_claimed);
 			return -EBUSY;
 		}
 	}
+	return 0;
+}
 
-	if (chan->dest) { // regardless of whether we're owner or not, check
+static void hpsc_mbox_maybe_release_owner(struct hpsc_mbox_chan *chan)
+{
+	if (chan->owner) {
+		// clearing owner also clears dest (resets the instance)
+		dev_dbg(chan->mbox->controller.dev, "clear config: %p <- 0\n",
+			chan->regs + REG_CONFIG);
+		writel(0, chan->regs + REG_CONFIG);
+	}
+}
+
+static int hpsc_mbox_verify_config(struct hpsc_mbox_chan *chan, bool is_recv,
+				   bool is_send)
+{
+	u32 config;
+	u32 owner;
+	u32 src;
+	u32 dest;
+	if (chan->src || chan->dest) {
 		config = readl(chan->regs + REG_CONFIG);
-		dev_dbg(mbox->controller.dev, "read config: %p <- %x\n",
+		dev_dbg(chan->mbox->controller.dev, "read config: %p <- %x\n",
 			chan->regs + REG_CONFIG, config);
 
 		owner = (config & REG_CONFIG__OWNER__MASK) >> REG_CONFIG__OWNER__SHIFT;
 		src   = (config & REG_CONFIG__SRC__MASK)   >> REG_CONFIG__SRC__SHIFT;
 		dest  = (config & REG_CONFIG__DEST__MASK)  >> REG_CONFIG__DEST__SHIFT;
 
-		if ((chan->incoming  && chan->dest && dest != chan->dest) ||
-		    (!chan->incoming && chan->src && src != chan->src)) {
-			dev_err(mbox->controller.dev,
+		if ((is_recv && chan->dest && dest != chan->dest) ||
+		    (is_send && chan->src && src != chan->src)) {
+			dev_err(chan->mbox->controller.dev,
 				"src/dest mismatch: %x/%x (expected %x/%x)\n",
 				src, dest, chan->src, chan->dest);
-			// TODO: roll back any changes to owner?	
 			return -EBUSY;
 		}
 	}
+	return 0;
+}
 
-	ie = readl(chan->regs + REG_INT_ENABLE);
+static int hpsc_mbox_startup(struct mbox_chan *link)
+{
+	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
+	struct hpsc_mbox_chan *chan = link->con_priv;
+	u32 ie;
+	int ret;
+	// conceivably, send and recv not mutually exclusive
+	bool is_recv = link->cl->rx_callback;
+	bool is_send = link->cl->tx_done;
+
+	// Note: owner+dest is entirely orthogonal to direction.
+	// Note; owner+src+dest are entirely optional, may set both to zero in DT
+	// Note: owner/src/dest access is not enforced by HW, it can only
+	//       serve as a mild sanity check.
+	ret = hpsc_mbox_maybe_claim_owner(chan);
+	if (ret)
+		return ret;
+
+	// regardless of whether we're owner or not, check config
+	ret = hpsc_mbox_verify_config(chan, is_recv, is_send);
+	if (ret) {
+		hpsc_mbox_maybe_release_owner(chan);
+		return ret;
+	}
+
 	// only enable interrupts if our client can handle them
 	// otherwise, another entity is expected to process the interrupts
-	if (link->cl->rx_callback)
+	ie = readl(chan->regs + REG_INT_ENABLE);
+	if (is_recv)
 		ie |= HPSC_MBOX_INT_A(mbox->rcv_int_idx);
-	if (link->cl->tx_done)
+	if (is_send)
 		ie |= HPSC_MBOX_INT_B(mbox->ack_int_idx);
 	dev_dbg(mbox->controller.dev, "instance %u int_enable <- %08x (rcv)\n",
-			chan->instance, ie);
+		chan->instance, ie);
 	writel(ie, chan->regs + REG_INT_ENABLE);
 
 	return 0;
@@ -234,15 +272,10 @@ static void hpsc_mbox_shutdown(struct mbox_chan *link)
 	ie &= ~HPSC_MBOX_INT_A(mbox->rcv_int_idx);
 	ie &= ~HPSC_MBOX_INT_B(mbox->ack_int_idx);
 	dev_dbg(mbox->controller.dev, "instance %u int_enable <- %08x (rcv)\n",
-			chan->instance, ie);
+		chan->instance, ie);
 	writel(ie, chan->regs + REG_INT_ENABLE);
 
-	if (chan->owner) {
-		dev_dbg(mbox->controller.dev, "clear config: %p <- 0\n",
-			chan->regs + REG_CONFIG);
-		writel(0, chan->regs + REG_CONFIG);
-		// clearing owner also clears dest (resets the instance)
-	}
+	hpsc_mbox_maybe_release_owner(chan);
 }
 
 static const struct mbox_chan_ops hpsc_mbox_chan_ops = {
@@ -258,7 +291,7 @@ static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
 	struct mbox_chan *link;
 	struct hpsc_mbox_chan *chan;
 
-	if (sp->args_count != 5) {
+	if (sp->args_count != 4) {
 		dev_err(mbox->dev,
 			"invalid mailbox instance reference in DT node\n");
 		return ERR_PTR(-EINVAL);
@@ -268,10 +301,9 @@ static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
 
 	// Slightly not nice, since adding side-effects to an otherwise pure function
 	chan = (struct hpsc_mbox_chan *)link->con_priv;
-	chan->incoming = sp->args[1];
-	chan->owner = sp->args[2];
-	chan->src = sp->args[3];
-	chan->dest = sp->args[4];
+	chan->owner = sp->args[1];
+	chan->src = sp->args[2];
+	chan->dest = sp->args[3];
 
 	return link;
 }
