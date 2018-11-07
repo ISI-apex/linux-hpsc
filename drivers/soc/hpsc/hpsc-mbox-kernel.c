@@ -185,11 +185,6 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 		spin_unlock(&tdev->chans[i].lock);
 
 	dev_info(&pdev->dev, "registered\n");
-#if 0
-	u8 msg[HPSC_MBOX_MSG_LEN] = { 0x1 };
-	ret = hpsc_mbox_kernel_send(&tdev->nb, 0, msg);
-	pr_info("hpsc_mbox_kernel_send: %d\n", ret);
-#endif
 	return 0;
 
 fail_channel:
