@@ -105,6 +105,22 @@ static void mbox_sent(struct mbox_client *client, void *message, int r)
 	wake_up_interruptible(&mbox_chan_dev->wq);
 }
 
+static void mbox_client_init(struct mbox_client *cl, struct device *dev,
+			     bool incoming)
+{
+	// explicit NULLs in case mbox is reused in different direction
+	cl->dev			= dev;
+	if (incoming) {
+		cl->rx_callback	= mbox_received;
+		cl->tx_done	= NULL;
+	} else {
+		cl->rx_callback	= NULL;
+		cl->tx_done	= mbox_sent;
+	}
+	cl->tx_block		= false;
+	cl->knows_txdone	= false;
+}
+
 static int mbox_open(struct inode *inodep, struct file *filp)
 {
 	struct mbox_chan_dev *mbox_chan_dev = container_of(inodep->i_cdev,
@@ -113,7 +129,6 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	struct mbox_client_dev *tdev = mbox_chan_dev->tdev;
 	unsigned int major = imajor(inodep);
 	unsigned int minor = iminor(inodep);
-	struct of_phandle_args spec;
 	int ret;
 
 	if (major != tdev->major_num || minor >= tdev->num_chans)
@@ -131,36 +146,13 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	// only one thread will make it here
 	filp->private_data = mbox_chan_dev;
 
-	// Yes, framework also parses this prop, but we need the metadata about
-	// the direction of the channel here, and we can't get it through the
-	// interface into the framework This is a violation of encapsulation,
-	// as well as duplication of the parsing code, i.e. convention for
-	// mbox-cells meaning, between here and of_xlate callback in the
-	// controller (we can invoke that callback from here, but it's not
-	// exposing the metadata).
-	//
-	// If we want to make the direction dynamic, determined by file open
-	// mode, we have the opposite problem: can't pass the direction to
-	// the common mailbox framework, without modifying that interface.
-	if (of_parse_phandle_with_args(tdev->dev->of_node,
-				       DT_MBOXES_PROP, DT_MBOXES_CELLS,
-				       mbox_chan_dev->instance_idx, &spec)) {
-		dev_err(tdev->dev, "%s: can't parse '%s' property\n",
-			__func__, DT_MBOXES_PROP);
-		ret = -EINVAL;
-		goto out;
-	}
-	// NOTE: protocol also in of_xlate in mbox controller
-	mbox_chan_dev->incoming = spec.args[1];
-	of_node_put(spec.np);
-
 	// We allow reading of outgoing mbox (to get the [N]ACK), but not
 	// writing of incoming mbox.
-	if (mbox_chan_dev->incoming && filp->f_mode & FMODE_WRITE) {
-		dev_err(tdev->dev, "file access mode disagrees with spec in DT node\n");
-		ret = -EINVAL;
-		goto out;
-	}
+	mbox_chan_dev->incoming =  (filp->f_mode & FMODE_READ) &&
+				  !(filp->f_mode & FMODE_WRITE);
+
+	mbox_client_init(&mbox_chan_dev->client, tdev->dev,
+			 mbox_chan_dev->incoming);
 
 	mbox_chan_dev->channel = mbox_request_channel(&mbox_chan_dev->client,
 						      mbox_chan_dev->instance_idx);
@@ -266,9 +258,7 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 		// taken the message from the kernel, so the remote sender may send
 		// the next message, with the guarantee that we have an empty buffer
 		// to accept it (since we have a buffer of size 1 message only).
-		// NOTE: yes, this is abuse of the method, but otherwise we need to
-		// add another method to the interface.
-		mbox_client_peek_data(mbox_chan_dev->channel);
+		mbox_send_message(mbox_chan_dev->channel, NULL);
 
 	} else { // outgoing, return the ACK
 
@@ -317,15 +307,6 @@ static const struct file_operations mbox_fops = {
 	.release	= mbox_release,
 };
 
-static void mbox_client_init(struct mbox_client *cl, struct device *dev)
-{
-	cl->dev			= dev;
-	cl->rx_callback		= mbox_received;
-	cl->tx_done		= mbox_sent;
-	cl->tx_block		= false;
-	cl->knows_txdone	= false;
-}
-
 static int mbox_chan_dev_init(struct mbox_chan_dev *mbox_chan_dev,
 			      struct mbox_client_dev *tdev, int minor,
 			      const char *name)
@@ -336,7 +317,6 @@ static int mbox_chan_dev_init(struct mbox_chan_dev *mbox_chan_dev,
 
 	mbox_chan_dev->tdev = tdev;
 	mbox_chan_dev->instance_idx = minor;
-	mbox_client_init(&mbox_chan_dev->client, tdev->dev);
 	spin_lock_init(&mbox_chan_dev->lock);
 	init_waitqueue_head(&mbox_chan_dev->wq);
 	cdev_init(&mbox_chan_dev->cdev, &mbox_fops);
