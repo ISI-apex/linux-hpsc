@@ -266,8 +266,8 @@
 			clock-names = "pclk", "hclk", "tx_clk";
 			#address-cells = <1>;
 			#size-cells = <0>;
-			#stream-id-cells = <0>;
-			iommus = <&smmu MASTER_ID_XGMAC>;
+			#stream-id-cells = <1>;
+			/* iommus = <&smmu MASTER_ID_XGMAC>; (unused, see smmu node) */
 			power-domains = <&pd_xgmac>;
 			local-mac-address = [00 0a 35 00 02 90];
 			phy-handle = <&phy0>;
@@ -329,10 +329,14 @@
                                 <0 157 4>, <0 158 4>, <0 159 4>, <0 160 4>,
                                 <0 161 4>, <0 162 4>, <0 163 4>, <0 164 4>,
                                 <0 165 4>, <0 166 4>, <0 167 4>, <0 168 4>;
-                        mmu-masters = <&xgmac
-                                       &hpps_dma
-                                       &srio0_dma
-                                       &srio1_dma>;
+
+                        /* Only mmu-masters/#stream-id-cells are used (legacy binding,
+                           in v4.20 it is depricated), iommus/#iommu-cells
+                           (generic binding) are unused. */
+                        mmu-masters = <&xgmac      MASTER_ID_XGMAC
+                                       &hpps_dma   MASTER_ID_HPPS_DMA
+                                       &srio0_dma  MASTER_ID_SRIO0_DMA
+                                       &srio1_dma  MASTER_ID_SRIO1_DMA>;
 		};
 
 		uart0: serial@f92c0000 {
@@ -486,36 +490,36 @@
 
 		hpps_dma: dma-controller@0xf92e0000 {
 			#dma-cells = <1>;
-			#stream-id-cells = <0>;
+			#stream-id-cells = <1>;
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0xf92e0000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 			interrupts = <0 63 4>, <0 64 4>;
-			iommus = <&smmu MASTER_ID_HPPS_DMA>;
+			/* iommus = <&smmu MASTER_ID_HPPS_DMA>; (unused, see smmu node) */
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
 
 		srio0_dma: dma-controller@0xe5310000 {
 			#dma-cells = <1>;
-			#stream-id-cells = <0>;
+			#stream-id-cells = <1>;
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0xe5310000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 			interrupts = <0 65 4>, <0 66 4>;
-			iommus = <&smmu MASTER_ID_SRIO0_DMA>;
+			/* iommus = <&smmu MASTER_ID_SRIO0_DMA>; (unused, see smmu node) */
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
 
 		srio1_dma: dma-controller@0xe5330000 {
 			#dma-cells = <1>;
-			#stream-id-cells = <0>;
+			#stream-id-cells = <1>;
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0xe5330000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 			interrupts = <0 67 4>, <0 68 4>;
-			iommus = <&smmu MASTER_ID_SRIO1_DMA>;
+			/* iommus = <&smmu MASTER_ID_SRIO1_DMA>; (unused, see smmu node) */
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
