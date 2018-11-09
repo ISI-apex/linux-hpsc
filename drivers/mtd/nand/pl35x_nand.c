@@ -31,7 +31,6 @@
 #include <linux/slab.h>
 
 #define PL35X_NAND_DRIVER_NAME "pl35x-nand"
-#define HPSC
 
 /* NAND flash driver defines */
 #define PL35X_NAND_CMD_PHASE	1	/* End command valid in command phase */
@@ -723,15 +722,12 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 	else
 		end_cmd = curr_cmd->end_cmd;
 
-#ifdef HPSC
 	/* this never be hit */
 	if ((command == NAND_CMD_READ0 || command == NAND_CMD_SEQIN) && !curr_cmd)
-#else
-	if (command == NAND_CMD_READ0 || command == NAND_CMD_SEQIN)
-#endif
 		addrcycles = xnand->row_addr_cycles + xnand->col_addr_cycles;
-	else if (command == NAND_CMD_ERASE1)
+	else if (command == NAND_CMD_ERASE1) {
 		addrcycles = xnand->row_addr_cycles;
+	}
 	else
 		addrcycles = curr_cmd->addr_cycles;
 
@@ -759,6 +755,13 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 
 	/* Command phase AXI write */
 	/* Read & Write */
+        if (command == NAND_CMD_ERASE1) { /* fixup for addrlen == 5 */
+                if (chip->chipsize > (128 << 20)) {
+			cmd_data = cmd_data | (page_addr << 16);
+			pl35x_nand_write32(cmd_addr, cmd_data);
+ 			cmd_data = (page_addr >> 16);
+		}
+        }
 	if (column != -1 && page_addr != -1) {
 		/* Adjust columns for 16 bit bus width */
 		if (chip->options & NAND_BUSWIDTH_16)
@@ -776,7 +779,11 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 		}
 	} else if (page_addr != -1) {
 		/* Erase */
-		cmd_data = page_addr;
+                if (chip->chipsize > (128 << 20)) {
+			cmd_data = (page_addr >> 16);
+		} else {
+			cmd_data = page_addr;
+		}
 	} else if (column != -1) {
 		/*
 		 * Change read/write column, read id etc
@@ -1068,10 +1075,15 @@ static int pl35x_nand_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "nand_scan_ident for NAND failed\n");
 		return -ENXIO;
 	}
-
-	xnand->row_addr_cycles = nand_chip->onfi_params.addr_cycles & 0xF;
-	xnand->col_addr_cycles =
+	if (nand_chip->onfi_version) {
+		xnand->row_addr_cycles = nand_chip->onfi_params.addr_cycles & 0xF;
+		xnand->col_addr_cycles =
 				(nand_chip->onfi_params.addr_cycles >> 4) & 0xF;
+	} else {
+		/* Gotten from arasan_nfc.c
+		For non-ONFI devices, configuring the address cyles as 5 */
+		xnand->row_addr_cycles = xnand->col_addr_cycles = 5;
+	}
 
 	pl35x_nand_ecc_init(mtd, ondie_ecc_state);
 	if (nand_chip->options & NAND_BUSWIDTH_16)
