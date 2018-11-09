@@ -17,6 +17,7 @@
 #define MASTER_ID_HPPS_CPU6 0x9e
 #define MASTER_ID_HPPS_CPU7 0x9f
 
+#define MASTER_ID_SMC       0x872
 #define MASTER_ID_XGMAC     0x874
 #define MASTER_ID_HPPS_DMA  0x877
 #define MASTER_ID_SRIO0_DMA 0x878
@@ -519,8 +520,7 @@
 			status = "okay";
 			clocks = <&clk100>, <&clk125>;
 			clock-names = "aclk", "memclk";
-/*			iommus = <&smmu 0x872>; */
-			#stream-id-cells = <1>;
+			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
 			compatible = "arm,pl353-smc-r2p1";
 			interrupt-parent = <&gic>;
 			interrupts = <0 14 4>;
