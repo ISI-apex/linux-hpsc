@@ -390,15 +390,15 @@
 			#mbox-cells = <4>;
 		};
 
-		mailbox_client_0 {
+		mailbox_client_trch {
 			compatible = "hpsc-mbox-userspace";
 			mboxes =  /* ip block, instance index, owner, src, dest */
 				    <&trch_mbox  MBOX_HPPS_TRCH__HPPS_TRCH      0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
 				    <&trch_mbox  MBOX_HPPS_TRCH__TRCH_HPPS      0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
-				    <&rtps_mbox  MBOX_HPPS_RTPS__HPPS_RTPS      0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&rtps_mbox  MBOX_HPPS_RTPS__RTPS_HPPS      0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
 				    <&trch_mbox  MBOX_HPPS_TRCH__HPPS_OWN_TRCH  MASTER_ID_HPPS_CPU0  MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
 				    <&trch_mbox  MBOX_HPPS_TRCH__TRCH_HPPS_OWN  MASTER_ID_HPPS_CPU0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
+				    <&trch_mbox   4     0                    0 0>,
+				    <&trch_mbox   5     0                    0 0>,
 				    <&trch_mbox   6     0                    0 0>,
 				    <&trch_mbox   7     0                    0 0>,
 				    <&trch_mbox   8     0                    0 0>,
@@ -423,16 +423,53 @@
 				    <&trch_mbox  27     0                    0 0>,
 				    <&trch_mbox  28     0                    0 0>,
 				    <&trch_mbox  29     0                    0 0>;
-                        /* NOTE: destination is just an identifier, mboxes accessible from any core */
-                        /* names optional, if not given, dev files named 'mbox%u' by index */
+			/* NOTE: destination is just an identifier, mboxes accessible from any core */
+			/* names optional, if not given, dev files named 'mbox%u' by index */
 			/*
 			mbox-names = "mbox_trch_out",
-                                     "mbox_trch_in",
-                                     "mbox_rtps_out",
-                                     "mbox_rtps_in",
-                                     "mbox_own_trch_out",
-                                     "mbox_own_trch_in";
-                        */
+				     "mbox_trch_in",
+				     "mbox_rtps_out",
+				     "mbox_rtps_in",
+				     "mbox_own_trch_out",
+				     "mbox_own_trch_in";
+			*/
+		};
+
+		mailbox_client_rpts {
+			compatible = "hpsc-mbox-userspace";
+			mboxes =  /* ip block, instance index, owner, src, dest */
+				    <&rtps_mbox   MBOX_HPPS_RTPS__HPPS_RTPS     0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
+				    <&rtps_mbox   MBOX_HPPS_RTPS__RTPS_HPPS     0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
+				    <&rtps_mbox   2     0                    0 0>,
+				    <&rtps_mbox   3     0                    0 0>,
+				    <&rtps_mbox   4     0                    0 0>,
+				    <&rtps_mbox   5     0                    0 0>,
+				    <&rtps_mbox   6     0                    0 0>,
+				    <&rtps_mbox   7     0                    0 0>,
+				    <&rtps_mbox   8     0                    0 0>,
+				    <&rtps_mbox   9     0                    0 0>,
+				    <&rtps_mbox  10     0                    0 0>,
+				    <&rtps_mbox  11     0                    0 0>,
+				    <&rtps_mbox  12     0                    0 0>,
+				    <&rtps_mbox  13     0                    0 0>,
+				    <&rtps_mbox  14     0                    0 0>,
+				    <&rtps_mbox  15     0                    0 0>,
+				    <&rtps_mbox  16     0                    0 0>,
+				    <&rtps_mbox  17     0                    0 0>,
+				    <&rtps_mbox  18     0                    0 0>,
+				    <&rtps_mbox  19     0                    0 0>,
+				    <&rtps_mbox  20     0                    0 0>,
+				    <&rtps_mbox  21     0                    0 0>,
+				    <&rtps_mbox  22     0                    0 0>,
+				    <&rtps_mbox  23     0                    0 0>,
+				    <&rtps_mbox  24     0                    0 0>,
+				    <&rtps_mbox  25     0                    0 0>,
+				    <&rtps_mbox  26     0                    0 0>,
+				    <&rtps_mbox  27     0                    0 0>,
+				    <&rtps_mbox  28     0                    0 0>,
+				    <&rtps_mbox  29     0                    0 0>,
+				    <&rtps_mbox  30     0                    0 0>,
+				    <&rtps_mbox  31     0                    0 0>;
 		};
 
 		mailbox_kernel {
