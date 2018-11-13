@@ -24,16 +24,20 @@ int hpsc_msg_wdt_timeout(unsigned int cpu)
 }
 EXPORT_SYMBOL_GPL(hpsc_msg_wdt_timeout);
 
-int hpsc_msg_lifecycle(enum hpsc_msg_lifecycle_status status, const char* info)
+#define LIFECYCLE_INFO_SIZE FIELD_SIZEOF(struct hpsc_msg_lifeycle_payload, info)
+int hpsc_msg_lifecycle(enum hpsc_msg_lifecycle_status status, const char *fmt, ...)
 {
 	// payload is the status enumeration and a string of debug data
+	va_list args;
 	struct hpsc_msg_lifeycle_payload p = {
 		.status = status,
 		.info = {0}
 	};
-	if (info)
-		strncpy(p.info, info,
-			FIELD_SIZEOF(struct hpsc_msg_lifeycle_payload, info));
+	if (fmt) {
+		va_start(args, fmt);
+		vsnprintf(p.info, LIFECYCLE_INFO_SIZE - 1, fmt, args);
+		va_end(args);
+	}
 	pr_info("hpsc_msg_lifecycle: %d: %s\n", p.status, p.info);
 	return msg_send(LIFECYCLE, &p, sizeof(p));
 }

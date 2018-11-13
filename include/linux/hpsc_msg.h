@@ -64,10 +64,10 @@ int hpsc_msg_wdt_timeout(unsigned int cpu);
  * Send a message indicating a change in lifecycle
  *
  * @param status The new status
- * @param infp Optional extra info
+ * @param fmt Optional extra info
  * @return 0 on success, a negative error code otherwise
  */
-int hpsc_msg_lifecycle(enum hpsc_msg_lifecycle_status status, const char* info);
+int hpsc_msg_lifecycle(enum hpsc_msg_lifecycle_status status, const char *fmt, ...);
 
 /**
  * Process a received messaged. Should only be called by hpsc-notif.
