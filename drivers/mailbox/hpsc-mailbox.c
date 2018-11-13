@@ -291,9 +291,10 @@ static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
 	struct mbox_chan *link;
 	struct hpsc_mbox_chan *chan;
 
-	if (sp->args_count != 4) {
+	if (sp->args[0] >= HPSC_MBOX_INSTANCES) {
 		dev_err(mbox->dev,
-			"invalid mailbox instance reference in DT node\n");
+			"mailbox index in DT node is %u, but must be < %u\n",
+			sp->args[0], HPSC_MBOX_INSTANCES);
 		return ERR_PTR(-EINVAL);
 	}
 
