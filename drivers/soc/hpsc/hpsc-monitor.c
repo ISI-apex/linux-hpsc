@@ -12,14 +12,10 @@
 #include <linux/notifier.h>
 #include <linux/reboot.h>
 
-#define LIFECYCLE_INFO_SIZE FIELD_SIZEOF(struct hpsc_msg_lifeycle_payload, info)
-
 static int hpsc_monitor_shutdown(struct notifier_block *nb,
 				 unsigned long action, void *data)
 {
-	char info[LIFECYCLE_INFO_SIZE];
-	snprintf(info, sizeof(info), "%lu", action);
-	if (hpsc_msg_lifecycle(LIFECYCLE_DOWN, info))
+	if (hpsc_msg_lifecycle(LIFECYCLE_DOWN, "%lu", action))
 		return NOTIFY_BAD;
 	return NOTIFY_OK;
 }
@@ -31,17 +27,28 @@ static struct notifier_block hpsc_monitor_shutdown_nb = {
 static int hpsc_monitor_die(struct notifier_block *nb, unsigned long action,
 			    void *data)
 {
-	char info[LIFECYCLE_INFO_SIZE];
 	struct die_args *args = data;
-	snprintf(info, sizeof(info), "%lu|%s|%ld|%d|%d",
-		 action, args->str, args->err, args->trapnr, args->signr);
-	if (hpsc_msg_lifecycle(LIFECYCLE_DOWN, args->str))
+	if (hpsc_msg_lifecycle(LIFECYCLE_DOWN, "%lu|%s|%ld|%d|%d",
+			       action, args->str, args->err, args->trapnr,
+			       args->signr))
 		return NOTIFY_BAD;
 	return NOTIFY_OK;
 }
 
 static struct notifier_block hpsc_monitor_die_nb = {
 	.notifier_call = hpsc_monitor_die
+};
+
+static int hpsc_monitor_panic(struct notifier_block *nb, unsigned long action,
+			      void *data)
+{
+	if (hpsc_msg_lifecycle(LIFECYCLE_DOWN, (char*) data))
+		return NOTIFY_BAD;
+	return NOTIFY_OK;
+}
+
+static struct notifier_block hpsc_monitor_panic_nb = {
+	.notifier_call = hpsc_monitor_panic
 };
 
 static int hpsc_monitor_up(void)
@@ -52,8 +59,13 @@ static int hpsc_monitor_up(void)
 static int __init hpsc_monitor_init(void)
 {
 	pr_info("hpsc-monitor: init\n");
+	// Note: Both the oops (die) and panic handlers may run - if this is a
+	// problem, track an atomic status variable to only send one message
 	// oops handler
 	register_die_notifier(&hpsc_monitor_die_nb);
+	// panic handler
+	atomic_notifier_chain_register(&panic_notifier_list,
+				       &hpsc_monitor_panic_nb);
 #if 0	// test oops
 	*(int*)0 = 0;
 #endif
