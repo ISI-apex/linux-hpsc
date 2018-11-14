@@ -32,6 +32,17 @@
 	aliases {
 		ethernet0 = &xgmac;
 		serial0 = &uart0;
+		/* Note: watchdog alias values can still be overriden if softdog is loaded first */
+		/* It may be helpful to start at a higher value, like watchdog10 */
+		/* Otherwise SW can parse /sys/class/watchdog/watchdog[N]/ to distinguish between watchdogs */
+		watchdog0 = &hpps_wdt0;
+		watchdog1 = &hpps_wdt1;
+		watchdog2 = &hpps_wdt2;
+		watchdog3 = &hpps_wdt3;
+		watchdog4 = &hpps_wdt4;
+		watchdog5 = &hpps_wdt5;
+		watchdog6 = &hpps_wdt6;
+		watchdog7 = &hpps_wdt7;
 	};
 
 	chosen {
@@ -393,10 +404,10 @@
 		mailbox_client_trch {
 			compatible = "hpsc-mbox-userspace";
 			mboxes =  /* ip block, instance index, owner, src, dest */
-				    <&trch_mbox  MBOX_HPPS_TRCH__HPPS_TRCH      0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&trch_mbox  MBOX_HPPS_TRCH__TRCH_HPPS      0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
-				    <&trch_mbox  MBOX_HPPS_TRCH__HPPS_OWN_TRCH  MASTER_ID_HPPS_CPU0  MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&trch_mbox  MBOX_HPPS_TRCH__TRCH_HPPS_OWN  MASTER_ID_HPPS_CPU0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
+				    <&trch_mbox   0     0                    0 0>,
+				    <&trch_mbox   1     0                    0 0>,
+				    <&trch_mbox   2     0                    0 0>,
+				    <&trch_mbox   3     0                    0 0>,
 				    <&trch_mbox   4     0                    0 0>,
 				    <&trch_mbox   5     0                    0 0>,
 				    <&trch_mbox   6     0                    0 0>,
@@ -423,6 +434,10 @@
 				    <&trch_mbox  27     0                    0 0>,
 				    <&trch_mbox  28     0                    0 0>,
 				    <&trch_mbox  29     0                    0 0>;
+				    /* Reserved for in-kernel SSW (see below)
+				     * <&trch_mbox  30     0                    0 0>,
+				     * <&trch_mbox  31     0                    0 0>;
+				     */
 			/* NOTE: destination is just an identifier, mboxes accessible from any core */
 			/* names optional, if not given, dev files named 'mbox%u' by index */
 			/*
@@ -438,8 +453,8 @@
 		mailbox_client_rpts {
 			compatible = "hpsc-mbox-userspace";
 			mboxes =  /* ip block, instance index, owner, src, dest */
-				    <&rtps_mbox   MBOX_HPPS_RTPS__HPPS_RTPS     0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&rtps_mbox   MBOX_HPPS_RTPS__RTPS_HPPS     0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
+				    <&rtps_mbox   0     0                    0 0>,
+				    <&rtps_mbox   1     0                    0 0>,
 				    <&rtps_mbox   2     0                    0 0>,
 				    <&rtps_mbox   3     0                    0 0>,
 				    <&rtps_mbox   4     0                    0 0>,
@@ -475,46 +490,46 @@
 		mailbox_kernel {
 			compatible = "hpsc-mbox-kernel";
 			mboxes =  /* ip block, instance index, owner, src, dest */
-                                  <&trch_mbox  MBOX_HPPS_TRCH__HPPS_TRCH_SSW  0	MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-                                  <&trch_mbox  MBOX_HPPS_TRCH__TRCH_HPPS_SSW  0	MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
+				    <&trch_mbox  30     0  MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
+				    <&trch_mbox  31     0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
 		};
 
-		hpps_wdt0 {
+		hpps_wdt0: wdt@F9240000 {
 			compatible = "hpsc,hpsc-wdt";
 			reg = <0x0 0xF9240000 0x0 0x10000>;
 		};
 
-		hpps_wdt1 {
+		hpps_wdt1: wdt@F9250000 {
 			compatible = "hpsc,hpsc-wdt";
 			reg = <0x0 0xF9250000 0x0 0x10000>;
 		};
 
-		hpps_wdt2 {
+		hpps_wdt2: wdt@F9260000 {
 			compatible = "hpsc,hpsc-wdt";
 			reg = <0x0 0xF9260000 0x0 0x10000>;
 		};
 
-		hpps_wdt3 {
+		hpps_wdt3: wdt@F9270000 {
 			compatible = "hpsc,hpsc-wdt";
 			reg = <0x0 0xF9270000 0x0 0x10000>;
 		};
 
-		hpps_wdt4 {
+		hpps_wdt4: wdt@F9280000 {
 			compatible = "hpsc,hpsc-wdt";
 			reg = <0x0 0xF9280000 0x0 0x10000>;
 		};
 
-		hpps_wdt5 {
+		hpps_wdt5: wdt@F9290000 {
 			compatible = "hpsc,hpsc-wdt";
 			reg = <0x0 0xF9290000 0x0 0x10000>;
 		};
 
-		hpps_wdt6 {
+		hpps_wdt6: wdt@F92A0000 {
 			compatible = "hpsc,hpsc-wdt";
 			reg = <0x0 0xF92A0000 0x0 0x10000>;
 		};
 
-		hpps_wdt7 {
+		hpps_wdt7: wdt@F92B0000 {
 			compatible = "hpsc,hpsc-wdt";
 			reg = <0x0 0xF92B0000 0x0 0x10000>;
 		};
