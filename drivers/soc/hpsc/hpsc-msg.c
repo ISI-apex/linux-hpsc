@@ -47,7 +47,7 @@ EXPORT_SYMBOL_GPL(hpsc_msg_lifecycle);
  * The remainder of this file is for processing received messages.
  */
 
-static void msgcpy(unsigned char *dest, const unsigned char* src)
+static void msgcpy(unsigned char *dest, const unsigned char *src)
 {
 	// Note: can't use memcpy if mailbox was source; copy a word at a time
 	size_t i;
