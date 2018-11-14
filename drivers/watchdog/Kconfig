@@ -1916,9 +1916,9 @@ config UML_WATCHDOG
 	depends on UML || COMPILE_TEST
 
 # HPSC Architecture
+
 config HPSC_WDT
 	tristate "HPSC Chiplet hardware watchdog"
-	depends on ARCH_HPSC
 	select WATCHDOG_CORE
 	help
 	  Say Y here to support HPSC Chiplet watchdogs. Each processor core has
