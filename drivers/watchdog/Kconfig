@@ -2066,6 +2066,13 @@ config WATCHDOG_PRETIMEOUT_DEFAULT_GOV_PANIC
 	  a watchdog pretimeout event happens, consider that
 	  a watchdog feeder is dead and reboot is unavoidable.
 
+config WATCHDOG_PRETIMEOUT_DEFAULT_GOV_NOTIFIER
+	bool "notifier"
+	select WATCHDOG_PRETIMEOUT_GOV_NOTIFIER
+	help
+	  Use notifier watchdog pretimeout governor by default. On pretimeout,
+	  notifies registered listeners.
+
 endchoice
 
 config WATCHDOG_PRETIMEOUT_GOV_NOOP
@@ -2079,6 +2086,12 @@ config WATCHDOG_PRETIMEOUT_GOV_PANIC
 	help
 	  Panic watchdog pretimeout governor, on watchdog pretimeout
 	  event put the kernel into panic.
+
+config WATCHDOG_PRETIMEOUT_GOV_NOTIFIER
+	tristate "Notifier watchdog pretimeout governor"
+	help
+	  Notifier watchdog pretimeout governor, on watchdog pretimeout
+	  event, notify registered listeners.
 
 endif # WATCHDOG_PRETIMEOUT_GOV
 
