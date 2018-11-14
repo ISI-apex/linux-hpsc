@@ -11,6 +11,8 @@
 #include <linux/module.h>
 #include <linux/notifier.h>
 #include <linux/reboot.h>
+#include <linux/watchdog.h>
+#include <linux/watchdog_pretimeout_notifier.h>
 
 static int hpsc_monitor_shutdown(struct notifier_block *nb,
 				 unsigned long action, void *data)
@@ -51,6 +53,20 @@ static struct notifier_block hpsc_monitor_panic_nb = {
 	.notifier_call = hpsc_monitor_panic
 };
 
+static int hpsc_monitor_wdt(struct notifier_block *nb, unsigned long action,
+			    void *data)
+{
+	hpsc_msg_wdt_timeout(action);
+	pr_crit("hpsc_monitor_wdt: initiating poweroff\n");
+	orderly_poweroff(true);
+	// if we get this far, then poweroff failed
+	return NOTIFY_BAD;
+}
+
+static struct notifier_block hpsc_monitor_wdt_nb = {
+	.notifier_call = hpsc_monitor_wdt
+};
+
 static int hpsc_monitor_up(void)
 {
 	return hpsc_msg_lifecycle(LIFECYCLE_UP, NULL);
@@ -66,6 +82,11 @@ static int __init hpsc_monitor_init(void)
 	// panic handler
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &hpsc_monitor_panic_nb);
+	// failure is ok - the HW watchdog will reset us eventually
+	if (watchdog_pretimeout_notifier_register(&hpsc_monitor_wdt_nb))
+		pr_warn("hpsc-monitor: failed to register watchdog notifier - "
+			"'CONFIG_WATCHDOG_PRETIMEOUT_DEFAULT_GOV_NOTIFIER' "
+			"not set?");
 #if 0	// test oops
 	*(int*)0 = 0;
 #endif
@@ -81,6 +102,7 @@ static int __init hpsc_monitor_init(void)
 static void __exit hpsc_monitor_exit(void)
 {
 	pr_info("hpsc-monitor: exit\n");
+	watchdog_pretimeout_notifier_unregister(&hpsc_monitor_wdt_nb);
 	unregister_restart_handler(&hpsc_monitor_shutdown_nb);
 	unregister_reboot_notifier(&hpsc_monitor_shutdown_nb);
 	unregister_die_notifier(&hpsc_monitor_die_nb);

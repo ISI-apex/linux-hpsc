@@ -5,10 +5,10 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/reboot.h>
 #include <linux/types.h>
 #include <linux/of_address.h>
 #include <linux/watchdog.h>
+#include "watchdog_pretimeout.h"
 
 #define HPSC_WDT_TIMEOUT_MIN 1
 #define HPSC_WDT_TIMEOUT_MAX 60
@@ -16,29 +16,26 @@
 
 // TODO: SW timer to be replaced by HW watchdog stage 1 timer interrupt
 #define HPSC_WDT_USE_SW_TIMER
+#ifdef HPSC_WDT_USE_SW_TIMER
+#include <linux/hrtimer.h>
+#endif
 
 struct hpsc_wdt {
 	struct watchdog_device	wdd;
 	spinlock_t		lock;
 	struct device		*dev;
 	void __iomem		*base;
-	unsigned int		cpu;
 #ifdef HPSC_WDT_USE_SW_TIMER
 	struct hrtimer		timer;
 #endif
 };
 
 #ifdef HPSC_WDT_USE_SW_TIMER
-#include <linux/hrtimer.h>
-#include <linux/hpsc_msg.h>
-static unsigned int hpsc_wdt_dummy_cpu_ctr = 0;
 static enum hrtimer_restart hpsc_wdt_timeout(struct hrtimer *timer)
 {
 	struct hpsc_wdt *wdt = container_of(timer, struct hpsc_wdt, timer);
-	pr_info("HPSC Chiplet watchdog expired for cpu %d\n", wdt->cpu);
-	hpsc_msg_wdt_timeout(wdt->cpu);
-	pr_crit("Initiating poweroff\n");
-	orderly_poweroff(true);
+	dev_info(wdt->wdd.parent, "stage 1 interrupt received\n");
+	watchdog_notify_pretimeout(&wdt->wdd);
 	return HRTIMER_NORESTART;
 }
 #endif
@@ -57,7 +54,6 @@ static int hpsc_wdt_start(struct watchdog_device *wdog)
 	spin_unlock_irqrestore(&wdt->lock, flags);
 	return 0;
 }
-
 
 static int hpsc_wdt_stop(struct watchdog_device *wdog)
 {
@@ -111,7 +107,7 @@ static struct watchdog_ops hpsc_wdt_ops = {
 
 static struct watchdog_info hpsc_wdt_info = {
 	.options =	WDIOF_SETTIMEOUT | WDIOF_MAGICCLOSE |
-			WDIOF_KEEPALIVEPING,
+			WDIOF_KEEPALIVEPING | WDIOF_PRETIMEOUT,
 	.identity =	"HPSC Chiplet watchdog timer",
 };
 
@@ -138,25 +134,23 @@ static int hpsc_wdt_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct hpsc_wdt *wdt;
+	struct resource *res;
 	void __iomem *base;
 	int err;
 
-	dev_info(dev, "probe\n");
+	dev_dbg(dev, "probe\n");
 	wdt = devm_kzalloc(dev, sizeof(*wdt), GFP_KERNEL);
 	if (!wdt)
 		return -ENOMEM;
 	platform_set_drvdata(pdev, wdt);
 
-	// TODO: determine which CPU this watchdog is for
-	wdt->cpu = 0;
-
 #ifdef HPSC_WDT_USE_SW_TIMER
-	wdt->cpu = hpsc_wdt_dummy_cpu_ctr++;
 	hrtimer_init(&wdt->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	wdt->timer.function = hpsc_wdt_timeout;
 #endif
 
-	base = of_iomap(dev->of_node, 0);
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	base = devm_ioremap_resource(dev, res);
 	if (!base) {
 		dev_err(dev, "Failed to remap watchdog regs");
 		return -ENODEV;
@@ -165,25 +159,18 @@ static int hpsc_wdt_probe(struct platform_device *pdev)
 	hpsc_wdt_init(wdt, dev, base);
 	watchdog_set_drvdata(&wdt->wdd, wdt);
 	watchdog_init_timeout(&wdt->wdd, HPSC_WDT_TIMEOUT_DEFAULT, dev);
-	err = watchdog_register_device(&wdt->wdd);
+	err = devm_watchdog_register_device(&pdev->dev, &wdt->wdd);
 	if (err) {
 		dev_err(dev, "Failed to register watchdog device");
-		iounmap(base);
 		return err;
 	}
 
-	dev_info(dev, "registered\n");
+	dev_info(dev, "registered id = %d\n", wdt->wdd.id);
 	return 0;
 }
 
 static int hpsc_wdt_remove(struct platform_device *pdev)
 {
-	struct hpsc_wdt *wdt = platform_get_drvdata(pdev);
-	dev_info(&pdev->dev, "remove\n");
-
-	watchdog_unregister_device(&wdt->wdd);
-	iounmap(wdt->base);
-
 	// hpsc_wdt instance managed for us
 	dev_info(&pdev->dev, "unregistered\n");
 	return 0;
