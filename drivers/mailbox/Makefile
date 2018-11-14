@@ -40,9 +40,3 @@ obj-$(CONFIG_QCOM_APCS_IPC)	+= qcom-apcs-ipc-mailbox.o
 obj-$(CONFIG_TEGRA_HSP_MBOX)	+= tegra-hsp.o
 
 obj-$(CONFIG_ZYNQMP_IPI_MBOX)	+= zynqmp-ipi-mailbox.o
-
-obj-$(CONFIG_MAILBOX_TEST)	+= mailbox-test.o
-
-obj-$(CONFIG_HPSC_MBOX_USERSPACE)	+= hpsc-mbox-userspace.o
-
-obj-$(CONFIG_HPSC_MBOX_KERNEL)	+= hpsc-mbox-kernel.o

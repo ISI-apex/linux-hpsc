@@ -11,7 +11,7 @@
 #include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
-#include <linux/hpsc_notif.h>
+#include "hpsc_notif.h"
 
 #define DT_MBOXES_PROP	"mboxes"
 #define DT_MBOX_OUT	0
