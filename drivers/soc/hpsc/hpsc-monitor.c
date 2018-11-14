@@ -2,6 +2,8 @@
  * Module for registering listeners into other parts of the kernel.
  *
  * Currently monitors:
+ * -watchdog pretimeouts
+ * -kernel panic
  * -kernel oops
  * -system lifecycle
  */
@@ -93,8 +95,7 @@ static int __init hpsc_monitor_init(void)
 	// normal shutdown handlers
 	register_reboot_notifier(&hpsc_monitor_shutdown_nb);
 	register_restart_handler(&hpsc_monitor_shutdown_nb);
-	// TODO: At this point, the system can't really be considered "up".
-	// Is there a notifier we can listen on instead?
+	// as close as we can get to the system being "up"
 	hpsc_monitor_up();
 	return 0;
 }
@@ -102,9 +103,11 @@ static int __init hpsc_monitor_init(void)
 static void __exit hpsc_monitor_exit(void)
 {
 	pr_info("hpsc-monitor: exit\n");
-	watchdog_pretimeout_notifier_unregister(&hpsc_monitor_wdt_nb);
 	unregister_restart_handler(&hpsc_monitor_shutdown_nb);
 	unregister_reboot_notifier(&hpsc_monitor_shutdown_nb);
+	watchdog_pretimeout_notifier_unregister(&hpsc_monitor_wdt_nb);
+	atomic_notifier_chain_unregister(&panic_notifier_list,
+					 &hpsc_monitor_panic_nb);
 	unregister_die_notifier(&hpsc_monitor_die_nb);
 }
 
@@ -112,6 +115,5 @@ MODULE_DESCRIPTION("HPSC kernel monitoring module");
 MODULE_AUTHOR("Connor Imes <cimes@isi.edu>");
 MODULE_LICENSE("GPL v2");
 
-// module_init(hpsc_monitor_init);
 late_initcall(hpsc_monitor_init);
 module_exit(hpsc_monitor_exit);
