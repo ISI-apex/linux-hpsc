@@ -40,8 +40,9 @@ struct mbox_client_dev {
 static void client_rx_callback(struct mbox_client *cl, void *msg)
 {
 	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev, client);
+	unsigned long flags;
 	dev_info(cl->dev, "rx_callback\n");
-	spin_lock(&cdev->lock);
+	spin_lock_irqsave(&cdev->lock, flags);
 	// handle message synchronously
 	if (IS_ERR(cdev->channel)) {
 		// Note: Shouldn't happen currently, but in the future...?
@@ -56,18 +57,19 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 		// Tell the controller to issue the ACK.
 		mbox_send_message(cdev->channel, NULL);
 	}
-	spin_unlock(&cdev->lock);
+	spin_unlock_irqrestore(&cdev->lock, flags);
 }
 
 static void client_tx_done(struct mbox_client *cl, void *msg, int r)
 {
 	// received a [N]ACK from previous message
 	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev, client);
-	spin_lock(&cdev->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&cdev->lock, flags);
 	cdev->send_ack = true;
-	spin_unlock(&cdev->lock);
+	spin_unlock_irqrestore(&cdev->lock, flags);
 	if (r)
-		dev_warn(cl->dev, "tx_done: got NACK%d\n", r);
+		dev_warn(cl->dev, "tx_done: got NACK: %d\n", r);
 	else
 		dev_info(cl->dev, "tx_done: got ACK\n");
 }
@@ -78,9 +80,10 @@ static int hpsc_mbox_kernel_send(struct notifier_block *nb,
 	// send message synchronously
 	struct mbox_client_dev *tdev = container_of(nb, struct mbox_client_dev, nb);
 	struct mbox_chan_dev *cdev = &tdev->chans[DT_MBOX_OUT];
+	unsigned long flags;
 	int ret;
 	dev_info(tdev->dev, "send\n");
-	spin_lock(&cdev->lock);
+	spin_lock_irqsave(&cdev->lock, flags);
 	if (!cdev->send_ack) {
 		// previous message not yet ack'd
 		ret = NOTIFY_STOP_MASK | EAGAIN;
@@ -98,7 +101,7 @@ static int hpsc_mbox_kernel_send(struct notifier_block *nb,
 		ret = -ret;
 	}
 send_out:
-	spin_unlock(&cdev->lock);
+	spin_unlock_irqrestore(&cdev->lock, flags);
 	return ret;
 }
 
@@ -142,6 +145,7 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev;
 	struct mbox_chan_dev *cdev;
+	unsigned long flags[DT_MBOXES_COUNT];
 	int i;
 	int ret;
 
@@ -166,12 +170,12 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	// First, lock each channel before opening them
 	for (i = 0; i < DT_MBOXES_COUNT; i++) {
 		cdev = &tdev->chans[i];
-		spin_lock(&cdev->lock);
+		spin_lock_irqsave(&cdev->lock, flags[i]);
 		cdev->channel = mbox_request_channel(&cdev->client, i);
 		if (IS_ERR(cdev->channel)) {
 			dev_err(tdev->dev, "Channel request failed: %u\n", i);
 			ret = PTR_ERR(cdev->channel);
-			spin_unlock(&cdev->lock);
+			spin_unlock_irqrestore(&cdev->lock, flags[i]);
 			goto fail_channel;
 		}
 	}
@@ -182,7 +186,7 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	BUG_ON(ret); // we should be the only mailbox handler
 	// Finally, release the lock to start processing any pending messages
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
-		spin_unlock(&tdev->chans[i].lock);
+		spin_unlock_irqrestore(&tdev->chans[i].lock, flags[i]);
 
 	dev_info(&pdev->dev, "registered\n");
 	return 0;
@@ -192,7 +196,7 @@ fail_channel:
 		cdev = &tdev->chans[i];
 		mbox_free_channel(cdev->channel);
 		cdev->channel = NULL;
-		spin_unlock(&cdev->lock);
+		spin_unlock_irqrestore(&cdev->lock, flags[i]);
 	}
 	return ret;
 }
