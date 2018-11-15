@@ -9,7 +9,6 @@
 #include <linux/mtd/rawnand.h>
 #include <linux/sizes.h>
 
-#define HPSC
 #define LP_OPTIONS 0
 #define LP_OPTIONS16 (LP_OPTIONS | NAND_BUSWIDTH_16)
 
@@ -158,7 +157,7 @@ struct nand_flash_dev nand_flash_ids[] = {
 	EXTENDED_ID_NAND("NAND 32GiB 3,3V 8-bit",  0x3C, 32768, LP_OPTIONS),
 	EXTENDED_ID_NAND("NAND 32GiB 1,8V 16-bit", 0x2C, 32768, LP_OPTIONS16),
 	EXTENDED_ID_NAND("NAND 32GiB 3,3V 16-bit", 0x4C, 32768, LP_OPTIONS16),
-#ifdef HPSC
+#if IS_ENABLED(CONFIG_ARCH_HPSC)
 	EXTENDED_ID_NAND("NAND 32GiB 1,8V 8-bit",  0x44, 32768, LP_OPTIONS),
 #endif
 
