@@ -34,8 +34,8 @@ struct mbox_client_dev {
 	struct device		*dev;
 	struct mbox_chan_dev	*chans;
 	int			num_chans;
-	unsigned		major_num;
-	unsigned		instance;
+	unsigned int		major_num;
+	int			id;
 };
 
 struct mbox_chan_dev {
@@ -47,7 +47,7 @@ struct mbox_chan_dev {
 	wait_queue_head_t       wq;
 
 	// Mailbox instance identifiers and config, stays constant
-	unsigned		instance_idx;
+	unsigned int		index;
 	bool			incoming;
 
 	// receive or tx buffer
@@ -67,46 +67,44 @@ static DEFINE_IDA(mbox_ida);
 
 static void mbox_received(struct mbox_client *client, void *message)
 {
-	struct mbox_chan_dev *mbox_chan_dev = container_of(client,
-							   struct mbox_chan_dev,
-							   client);
+	struct mbox_chan_dev *chan = container_of(client, struct mbox_chan_dev,
+						  client);
 	unsigned long flags;
 	u32 *msg = message;
 	unsigned i;
 
-	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
-	if (mbox_chan_dev->rx_msg_pending) {
-		dev_err(mbox_chan_dev->tdev->dev,
+	spin_lock_irqsave(&chan->lock, flags);
+	if (chan->rx_msg_pending) {
+		dev_err(chan->tdev->dev,
 			"rx: dropped message: buffer full\n");
 	} else {
 		// can't memcpy, need 4-byte word reads
 		for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i)
-			mbox_chan_dev->message[i] = msg[i];
+			chan->message[i] = msg[i];
 		print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS,
-				     mbox_chan_dev->message, MBOX_MAX_MSG_LEN);
-		mbox_chan_dev->rx_msg_pending = true;
+				     chan->message, MBOX_MAX_MSG_LEN);
+		chan->rx_msg_pending = true;
 	}
-	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
+	spin_unlock_irqrestore(&chan->lock, flags);
 
-	if (mbox_chan_dev->rx_msg_pending)
-		wake_up_interruptible(&mbox_chan_dev->wq);
+	if (chan->rx_msg_pending)
+		wake_up_interruptible(&chan->wq);
 }
 
 static void mbox_sent(struct mbox_client *client, void *message, int r)
 {
-	struct mbox_chan_dev *mbox_chan_dev = container_of(client,
-							   struct mbox_chan_dev,
-							   client);
+	struct mbox_chan_dev *chan = container_of(client, struct mbox_chan_dev,
+						  client);
 	unsigned long flags;
-	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
+	spin_lock_irqsave(&chan->lock, flags);
 	if (r)
 		dev_warn(client->dev, "sent: got NACK: %d\n", r);
 	else
 		dev_info(client->dev, "sent: got ACK\n");
-	mbox_chan_dev->send_rc = r;
-	mbox_chan_dev->send_ack = true;
-	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
-	wake_up_interruptible(&mbox_chan_dev->wq);
+	chan->send_rc = r;
+	chan->send_ack = true;
+	spin_unlock_irqrestore(&chan->lock, flags);
+	wake_up_interruptible(&chan->wq);
 }
 
 static void mbox_client_init(struct mbox_client *cl, struct device *dev,
@@ -127,10 +125,9 @@ static void mbox_client_init(struct mbox_client *cl, struct device *dev,
 
 static int mbox_open(struct inode *inodep, struct file *filp)
 {
-	struct mbox_chan_dev *mbox_chan_dev = container_of(inodep->i_cdev,
-							   struct mbox_chan_dev,
-							   cdev);
-	struct mbox_client_dev *tdev = mbox_chan_dev->tdev;
+	struct mbox_chan_dev *chan = container_of(inodep->i_cdev,
+						  struct mbox_chan_dev, cdev);
+	struct mbox_client_dev *tdev = chan->tdev;
 	unsigned long flags;
 	unsigned int major = imajor(inodep);
 	unsigned int minor = iminor(inodep);
@@ -139,32 +136,30 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	if (major != tdev->major_num || minor >= tdev->num_chans)
 		return -ENODEV;
 
-	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
+	spin_lock_irqsave(&chan->lock, flags);
 
-	if (mbox_chan_dev->channel) {
+	if (chan->channel) {
 		dev_info(tdev->dev, "mailbox %u already claimed\n",
-			 mbox_chan_dev->instance_idx);
+			 chan->index);
 		ret = -EBUSY;
 		goto out;
 	}
 
 	// only one thread will make it here
-	filp->private_data = mbox_chan_dev;
+	filp->private_data = chan;
 
 	// We allow reading of outgoing mbox (to get the [N]ACK), but not
 	// writing of incoming mbox.
-	mbox_chan_dev->incoming =  (filp->f_mode & FMODE_READ) &&
-				  !(filp->f_mode & FMODE_WRITE);
+	chan->incoming =  (filp->f_mode & FMODE_READ) &&
+			 !(filp->f_mode & FMODE_WRITE);
 
-	mbox_client_init(&mbox_chan_dev->client, tdev->dev,
-			 mbox_chan_dev->incoming);
+	mbox_client_init(&chan->client, tdev->dev, chan->incoming);
 
-	mbox_chan_dev->channel = mbox_request_channel(&mbox_chan_dev->client,
-						      mbox_chan_dev->instance_idx);
-	if (IS_ERR(mbox_chan_dev->channel)) {
+	chan->channel = mbox_request_channel(&chan->client, chan->index);
+	if (IS_ERR(chan->channel)) {
 		dev_err(tdev->dev, "request for mbox channel idx %u failed\n",
-			mbox_chan_dev->instance_idx);
-		mbox_chan_dev->channel = NULL;
+			chan->index);
+		chan->channel = NULL;
 		ret = -EIO;
 		goto out;
 	}
@@ -172,38 +167,38 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	ret = 0;
 
 out:
-	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
+	spin_unlock_irqrestore(&chan->lock, flags);
 	return ret;
 }
 
 static int mbox_release(struct inode *inodep, struct file *filp)
 {
-	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
+	struct mbox_chan_dev *chan = filp->private_data;
 	unsigned long flags;
 	// bad user might share FD among threads
-	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
-	if (mbox_chan_dev->channel) {
-		mbox_free_channel(mbox_chan_dev->channel);
-		mbox_chan_dev->channel = NULL;
+	spin_lock_irqsave(&chan->lock, flags);
+	if (chan->channel) {
+		mbox_free_channel(chan->channel);
+		chan->channel = NULL;
 	}
-	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
+	spin_unlock_irqrestore(&chan->lock, flags);
 	return 0;
 }
 
 static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 			  size_t count, loff_t *ppos)
 {
-	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
-	struct mbox_client_dev *tdev = mbox_chan_dev->tdev;
+	struct mbox_chan_dev *chan = filp->private_data;
+	struct mbox_client_dev *tdev = chan->tdev;
 	unsigned long flags;
 	int ret;
 
 	// bad user might share FD among threads
-	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
+	spin_lock_irqsave(&chan->lock, flags);
 
-	BUG_ON(!mbox_chan_dev->channel);
+	BUG_ON(!chan->channel);
 	// file read-only mode should not call this func
-	BUG_ON(mbox_chan_dev->incoming);
+	BUG_ON(chan->incoming);
 
 	if (count > MBOX_MAX_MSG_LEN) {
 		dev_err(tdev->dev, "message too long: %zd > %d\n", count,
@@ -212,7 +207,7 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 		goto out;
 	}
 
-	ret = copy_from_user(mbox_chan_dev->message, userbuf, count);
+	ret = copy_from_user(chan->message, userbuf, count);
 	if (ret) {
 		dev_err(tdev->dev, "failed to copy msg data from userspace\n");
 		ret = -EFAULT;
@@ -220,12 +215,12 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 	}
 
 	print_hex_dump_bytes("mailbox send: ", DUMP_PREFIX_ADDRESS,
-			     mbox_chan_dev->message, MBOX_MAX_MSG_LEN);
+			     chan->message, MBOX_MAX_MSG_LEN);
 
-	mbox_chan_dev->send_ack = false;
-	mbox_chan_dev->send_rc = 0;
+	chan->send_ack = false;
+	chan->send_rc = 0;
 
-	ret = mbox_send_message(mbox_chan_dev->channel, mbox_chan_dev->message);
+	ret = mbox_send_message(chan->channel, chan->message);
 	if (ret < 0) {
 		dev_err(tdev->dev, "Failed to send message via mailbox\n");
 		ret = -EIO;
@@ -235,70 +230,69 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 	// Note: successful return here does not indicate successful receipt of
 	//       sent message by the other end
 out:
-	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
+	spin_unlock_irqrestore(&chan->lock, flags);
 	return ret < 0 ? ret : count;
 }
 
 static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 			 loff_t *ppos)
 {
-	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
+	struct mbox_chan_dev *chan = filp->private_data;
 	unsigned long flags;
 	int ret;
 
 	// bad user might share FD among threads
-	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
+	spin_lock_irqsave(&chan->lock, flags);
 
-	if (mbox_chan_dev->incoming) {
-		if (!mbox_chan_dev->rx_msg_pending) {
+	if (chan->incoming) {
+		if (!chan->rx_msg_pending) {
 			ret = -EAGAIN;
 			goto out;
 		}
 
 		ret = simple_read_from_buffer(userbuf, MBOX_MAX_MSG_LEN, ppos,
-					      mbox_chan_dev->message,
-					      MBOX_MAX_MSG_LEN);
-		mbox_chan_dev->rx_msg_pending = false;
+					      chan->message, MBOX_MAX_MSG_LEN);
+		chan->rx_msg_pending = false;
 
 		// Tell the controller to issue the ACK, since userspace has
 		// taken the message from the kernel, so the remote sender may send
 		// the next message, with the guarantee that we have an empty buffer
 		// to accept it (since we have a buffer of size 1 message only).
-		mbox_send_message(mbox_chan_dev->channel, NULL);
+		mbox_send_message(chan->channel, NULL);
 	} else { // outgoing, return the ACK
-		if (!mbox_chan_dev->send_ack) {
+		if (!chan->send_ack) {
 			ret = -EAGAIN;
 			goto out;
 		}
 
 		ret = simple_read_from_buffer(userbuf, MBOX_MAX_MSG_LEN, ppos,
-					      &mbox_chan_dev->send_rc,
-					      sizeof(mbox_chan_dev->send_rc));
+					      &chan->send_rc,
+					      sizeof(chan->send_rc));
 
 		// If we clear here, then userspace can only fetch [N]ACK once
-		mbox_chan_dev->send_ack = false;
-		mbox_chan_dev->send_rc = 0;
+		chan->send_ack = false;
+		chan->send_rc = 0;
 	}
 out:
-	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
+	spin_unlock_irqrestore(&chan->lock, flags);
 	return ret;
 }
 
 static unsigned int mbox_poll(struct file *filp, poll_table *wait)
 {
-	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
+	struct mbox_chan_dev *chan = filp->private_data;
         unsigned int rc = 0;
 
-        dev_dbg(mbox_chan_dev->tdev->dev, "poll\n");
+        dev_dbg(chan->tdev->dev, "poll\n");
 
-        poll_wait(filp, &mbox_chan_dev->wq, wait);
+        poll_wait(filp, &chan->wq, wait);
 
-        if (mbox_chan_dev->rx_msg_pending || mbox_chan_dev->send_ack)
+        if (chan->rx_msg_pending || chan->send_ack)
                 rc |= POLLIN | POLLRDNORM;
-        if (!mbox_chan_dev->send_ack)
+        if (!chan->send_ack)
                 rc |= POLLOUT | POLLWRNORM;
 
-        dev_dbg(mbox_chan_dev->tdev->dev, "poll ret: %d\n", rc);
+        dev_dbg(chan->tdev->dev, "poll ret: %d\n", rc);
         return rc;
 }
 
@@ -311,7 +305,7 @@ static const struct file_operations mbox_fops = {
 	.release	= mbox_release,
 };
 
-static int mbox_chan_dev_init(struct mbox_chan_dev *mbox_chan_dev,
+static int mbox_chan_dev_init(struct mbox_chan_dev *chan,
 			      struct mbox_client_dev *tdev, int minor,
 			      const char *name)
 {
@@ -319,23 +313,23 @@ static int mbox_chan_dev_init(struct mbox_chan_dev *mbox_chan_dev,
 	int rc;
 	dev_t devno = MKDEV(tdev->major_num, minor);
 
-	mbox_chan_dev->tdev = tdev;
-	mbox_chan_dev->instance_idx = minor;
-	spin_lock_init(&mbox_chan_dev->lock);
-	init_waitqueue_head(&mbox_chan_dev->wq);
-	cdev_init(&mbox_chan_dev->cdev, &mbox_fops);
+	chan->tdev = tdev;
+	chan->index = minor;
+	spin_lock_init(&chan->lock);
+	init_waitqueue_head(&chan->wq);
+	cdev_init(&chan->cdev, &mbox_fops);
 
-	rc = cdev_add(&mbox_chan_dev->cdev, devno, 1);
+	rc = cdev_add(&chan->cdev, devno, 1);
 	if (rc) {
 		dev_err(tdev->dev, "failed to add cdev\n");
 		return rc;
 	}
 
 	device = device_create(class, NULL, devno, NULL, "%s!%d!%s",
-			       class->name, tdev->instance, name);
+			       class->name, tdev->id, name);
 	if (IS_ERR(device)) {
 		dev_err(tdev->dev, "failed to create device\n");
-		cdev_del(&mbox_chan_dev->cdev);
+		cdev_del(&chan->cdev);
 		return PTR_ERR(device);
 	}
 
@@ -344,7 +338,7 @@ static int mbox_chan_dev_init(struct mbox_chan_dev *mbox_chan_dev,
 
 static void mbox_chan_dev_destroy(struct mbox_chan_dev *chan)
 {
-	device_destroy(class, MKDEV(chan->tdev->major_num, chan->instance_idx));
+	device_destroy(class, MKDEV(chan->tdev->major_num, chan->index));
 	cdev_del(&chan->cdev);
 }
 
@@ -426,11 +420,12 @@ static int mbox_client_dev_init(struct mbox_client_dev *tdev,
 	}
 	tdev->major_num = MAJOR(dev);
 
-	tdev->instance = ida_simple_get(&mbox_ida, 0, 0, GFP_KERNEL);
+	tdev->id = ida_simple_get(&mbox_ida, 0, 0, GFP_KERNEL);
 	ret = mbox_create_dev_files(tdev);
 	if (ret) {
-		ida_simple_remove(&mbox_ida, tdev->instance);
-		unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
+		ida_simple_remove(&mbox_ida, tdev->id);
+		unregister_chrdev_region(MKDEV(tdev->major_num, 0),
+					 tdev->num_chans);
 		return ret;
 	}
 
@@ -465,7 +460,7 @@ static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
 	for (i = tdev->num_chans - 1; i >= 0; --i)
 		mbox_chan_dev_destroy(&tdev->chans[i]);
 
-	ida_simple_remove(&mbox_ida, tdev->instance);
+	ida_simple_remove(&mbox_ida, tdev->id);
 	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
 
 	return 0;
