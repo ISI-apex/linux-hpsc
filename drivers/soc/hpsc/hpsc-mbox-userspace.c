@@ -70,10 +70,11 @@ static void mbox_received(struct mbox_client *client, void *message)
 	struct mbox_chan_dev *mbox_chan_dev = container_of(client,
 							   struct mbox_chan_dev,
 							   client);
+	unsigned long flags;
 	u32 *msg = message;
 	unsigned i;
 
-	spin_lock(&mbox_chan_dev->lock);
+	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
 	if (mbox_chan_dev->rx_msg_pending) {
 		dev_err(mbox_chan_dev->tdev->dev,
 			"rx: dropped message: buffer full\n");
@@ -85,7 +86,7 @@ static void mbox_received(struct mbox_client *client, void *message)
 				     mbox_chan_dev->message, MBOX_MAX_MSG_LEN);
 		mbox_chan_dev->rx_msg_pending = true;
 	}
-	spin_unlock(&mbox_chan_dev->lock);
+	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
 
 	if (mbox_chan_dev->rx_msg_pending)
 		wake_up_interruptible(&mbox_chan_dev->wq);
@@ -96,14 +97,15 @@ static void mbox_sent(struct mbox_client *client, void *message, int r)
 	struct mbox_chan_dev *mbox_chan_dev = container_of(client,
 							   struct mbox_chan_dev,
 							   client);
-	spin_lock(&mbox_chan_dev->lock);
+	unsigned long flags;
+	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
 	if (r)
 		dev_warn(client->dev, "sent: got NACK: %d\n", r);
 	else
 		dev_info(client->dev, "sent: got ACK\n");
 	mbox_chan_dev->send_rc = r;
 	mbox_chan_dev->send_ack = true;
-	spin_unlock(&mbox_chan_dev->lock);
+	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
 	wake_up_interruptible(&mbox_chan_dev->wq);
 }
 
@@ -129,6 +131,7 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 							   struct mbox_chan_dev,
 							   cdev);
 	struct mbox_client_dev *tdev = mbox_chan_dev->tdev;
+	unsigned long flags;
 	unsigned int major = imajor(inodep);
 	unsigned int minor = iminor(inodep);
 	int ret;
@@ -136,7 +139,7 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	if (major != tdev->major_num || minor >= tdev->num_chans)
 		return -ENODEV;
 
-	spin_lock(&mbox_chan_dev->lock);
+	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
 
 	if (mbox_chan_dev->channel) {
 		dev_info(tdev->dev, "mailbox %u already claimed\n",
@@ -169,20 +172,21 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	ret = 0;
 
 out:
-	spin_unlock(&mbox_chan_dev->lock);
+	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
 	return ret;
 }
 
 static int mbox_release(struct inode *inodep, struct file *filp)
 {
 	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
+	unsigned long flags;
 	// bad user might share FD among threads
-	spin_lock(&mbox_chan_dev->lock);
+	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
 	if (mbox_chan_dev->channel) {
 		mbox_free_channel(mbox_chan_dev->channel);
 		mbox_chan_dev->channel = NULL;
 	}
-	spin_unlock(&mbox_chan_dev->lock);
+	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
 	return 0;
 }
 
@@ -191,10 +195,11 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 {
 	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
 	struct mbox_client_dev *tdev = mbox_chan_dev->tdev;
+	unsigned long flags;
 	int ret;
 
 	// bad user might share FD among threads
-	spin_lock(&mbox_chan_dev->lock);
+	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
 
 	BUG_ON(!mbox_chan_dev->channel);
 	// file read-only mode should not call this func
@@ -230,7 +235,7 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 	// Note: successful return here does not indicate successful receipt of
 	//       sent message by the other end
 out:
-	spin_unlock(&mbox_chan_dev->lock);
+	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
 	return ret < 0 ? ret : count;
 }
 
@@ -238,10 +243,11 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 			 loff_t *ppos)
 {
 	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
+	unsigned long flags;
 	int ret;
 
 	// bad user might share FD among threads
-	spin_lock(&mbox_chan_dev->lock);
+	spin_lock_irqsave(&mbox_chan_dev->lock, flags);
 
 	if (mbox_chan_dev->incoming) {
 		if (!mbox_chan_dev->rx_msg_pending) {
@@ -274,7 +280,7 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 		mbox_chan_dev->send_rc = 0;
 	}
 out:
-	spin_unlock(&mbox_chan_dev->lock);
+	spin_unlock_irqrestore(&mbox_chan_dev->lock, flags);
 	return ret;
 }
 
