@@ -51,13 +51,13 @@ struct mbox_chan_dev {
 	bool			incoming;
 
 	// receive or tx buffer
-	// NOTE: could alloc on open to not spend heap mem on unused mboxes,
-	//       don't bother for now since it's a small amount of mem
 	u32			message[HPSC_MBOX_DATA_REGS];
-
-	bool			rx_msg_pending; // a received message is ready to be read
-	bool			send_ack; // set when controller notifies us from its ACK ISR
-	int			send_rc;  // status code controller gives us for the ACK
+	// a received message is ready to be read
+	bool			rx_msg_pending;
+	// set when controller notifies us from its ACK ISR
+	bool			send_ack;
+	// status code controller gives us for the ACK
+	int			send_rc;
 };
 
 // May be multiple mailbox instances
@@ -67,7 +67,9 @@ static DEFINE_IDA(mbox_ida);
 
 static void mbox_received(struct mbox_client *client, void *message)
 {
-	struct mbox_chan_dev *mbox_chan_dev = container_of(client, struct mbox_chan_dev, client);
+	struct mbox_chan_dev *mbox_chan_dev = container_of(client,
+							   struct mbox_chan_dev,
+							   client);
 	u32 *msg = message;
 	unsigned i;
 
@@ -86,21 +88,22 @@ static void mbox_received(struct mbox_client *client, void *message)
 	spin_unlock(&mbox_chan_dev->lock);
 
 	if (mbox_chan_dev->rx_msg_pending)
-	    wake_up_interruptible(&mbox_chan_dev->wq);
+		wake_up_interruptible(&mbox_chan_dev->wq);
 }
 
 static void mbox_sent(struct mbox_client *client, void *message, int r)
 {
-	struct mbox_chan_dev *mbox_chan_dev = container_of(client, struct mbox_chan_dev, client);
+	struct mbox_chan_dev *mbox_chan_dev = container_of(client,
+							   struct mbox_chan_dev,
+							   client);
 	spin_lock(&mbox_chan_dev->lock);
 	if (r)
-		dev_warn(client->dev, "sent: got NACK%d\n", r);
+		dev_warn(client->dev, "sent: got NACK: %d\n", r);
 	else
 		dev_info(client->dev, "sent: got ACK\n");
 	mbox_chan_dev->send_rc = r;
 	mbox_chan_dev->send_ack = true;
 	spin_unlock(&mbox_chan_dev->lock);
-
 	wake_up_interruptible(&mbox_chan_dev->wq);
 }
 
@@ -194,8 +197,7 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 	spin_lock(&mbox_chan_dev->lock);
 
 	BUG_ON(!mbox_chan_dev->channel);
-	// file mode should not call this func
-	// TODO: unless we add getting ACK through read of !incoming mbox
+	// file read-only mode should not call this func
 	BUG_ON(mbox_chan_dev->incoming);
 
 	if (count > MBOX_MAX_MSG_LEN) {
@@ -242,7 +244,6 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 	spin_lock(&mbox_chan_dev->lock);
 
 	if (mbox_chan_dev->incoming) {
-
 		if (!mbox_chan_dev->rx_msg_pending) {
 			ret = -EAGAIN;
 			goto out;
@@ -258,9 +259,7 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 		// the next message, with the guarantee that we have an empty buffer
 		// to accept it (since we have a buffer of size 1 message only).
 		mbox_send_message(mbox_chan_dev->channel, NULL);
-
 	} else { // outgoing, return the ACK
-
 		if (!mbox_chan_dev->send_ack) {
 			ret = -EAGAIN;
 			goto out;
@@ -284,7 +283,7 @@ static unsigned int mbox_poll(struct file *filp, poll_table *wait)
 	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
         unsigned int rc = 0;
 
-        dev_info(mbox_chan_dev->tdev->dev, "poll\n");
+        dev_dbg(mbox_chan_dev->tdev->dev, "poll\n");
 
         poll_wait(filp, &mbox_chan_dev->wq, wait);
 
@@ -293,7 +292,7 @@ static unsigned int mbox_poll(struct file *filp, poll_table *wait)
         if (!mbox_chan_dev->send_ack)
                 rc |= POLLOUT | POLLWRNORM;
 
-        dev_info(mbox_chan_dev->tdev->dev, "poll ret: %d\n", rc);
+        dev_dbg(mbox_chan_dev->tdev->dev, "poll ret: %d\n", rc);
         return rc;
 }
 
@@ -322,14 +321,14 @@ static int mbox_chan_dev_init(struct mbox_chan_dev *mbox_chan_dev,
 
 	rc = cdev_add(&mbox_chan_dev->cdev, devno, 1);
 	if (rc) {
-		dev_err(tdev->dev, "%s: failed to add cdev\n", __func__);
+		dev_err(tdev->dev, "failed to add cdev\n");
 		return rc;
 	}
 
 	device = device_create(class, NULL, devno, NULL, "%s!%d!%s",
 			       class->name, tdev->instance, name);
 	if (IS_ERR(device)) {
-		dev_err(tdev->dev, "%s: failed to create device\n", __func__);
+		dev_err(tdev->dev, "failed to create device\n");
 		cdev_del(&mbox_chan_dev->cdev);
 		return PTR_ERR(device);
 	}
@@ -353,11 +352,6 @@ static int mbox_create_dev_files(struct mbox_client_dev *tdev)
 	int rc;
 
 	names_prop = of_find_property(dt_node, DT_MBOX_NAMES_PROP, NULL);
-	if (!names_prop) 
-		dev_dbg(tdev->dev,
-			"%s: no '%s' property, not creating named device files\n",
-			__func__, DT_MBOX_NAMES_PROP);
-
 
 	for (i = 0; i < tdev->num_chans; ++i) {
 		if (names_prop) { // name from DT node
@@ -409,8 +403,8 @@ static int mbox_client_dev_init(struct mbox_client_dev *tdev,
 	tdev->num_chans = of_count_phandle_with_args(tdev->dev->of_node,
 						     DT_MBOXES_PROP,
 						     DT_MBOXES_CELLS);
-	dev_info(tdev->dev, "%s: num instances in '%s' property: %d\n",
-		 __func__, DT_MBOXES_PROP, tdev->num_chans);
+	dev_info(tdev->dev, "num instances in '%s' property: %d\n",
+		 DT_MBOXES_PROP, tdev->num_chans);
 	if (tdev->num_chans < 0)
 		return -EINVAL;
 
@@ -452,7 +446,6 @@ static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	dev_info(&pdev->dev, "registered\n");
 	return 0;
 }
 
@@ -469,7 +462,6 @@ static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
 	ida_simple_remove(&mbox_ida, tdev->instance);
 	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
 
-	dev_info(&pdev->dev, "unregistered\n");
 	return 0;
 }
 
