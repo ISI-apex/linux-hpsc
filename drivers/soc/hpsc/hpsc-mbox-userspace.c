@@ -38,20 +38,30 @@ struct mbox_client_dev {
 	int			id;
 };
 
+/*
+ * Locking must protect against the follwing:
+ * First, interrupts from the mailbox API and user operations can race.
+ * Second, a userspace app might share file descriptors between threads and race
+ * on file operations.
+ * Critically, we must protect against operations after a channel is closed.
+ */
 struct mbox_chan_dev {
+	/* fixed fields */
 	struct mbox_client_dev	*tdev;
 	struct cdev		cdev;
-	struct mbox_client	client;
-	struct mbox_chan	*channel;
 	spinlock_t		lock;
 	wait_queue_head_t       wq;
-
-	// Mailbox instance identifiers and config, stays constant
 	unsigned int		index;
-	bool			incoming;
 
-	// receive or tx buffer
+	/* dynamic fields */
+
+	// mbox structs
+	struct mbox_client	client;
+	struct mbox_chan	*channel;
+	// rx/tx buffer
 	u32			message[HPSC_MBOX_DATA_REGS];
+	// direction
+	bool			incoming;
 	// a received message is ready to be read
 	bool			rx_msg_pending;
 	// set when controller notifies us from its ACK ISR
@@ -74,21 +84,26 @@ static void mbox_received(struct mbox_client *client, void *message)
 	unsigned i;
 
 	spin_lock_irqsave(&chan->lock, flags);
+	if (!chan->channel) {
+		dev_err(chan->tdev->dev,
+			"rx: dropped message: mailbox closed: %u\n",
+			chan->index);
+		goto out;
+	}
 	if (chan->rx_msg_pending) {
 		dev_err(chan->tdev->dev,
-			"rx: dropped message: buffer full\n");
-	} else {
-		// can't memcpy, need 4-byte word reads
-		for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i)
-			chan->message[i] = msg[i];
-		print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS,
-				     chan->message, MBOX_MAX_MSG_LEN);
-		chan->rx_msg_pending = true;
+			"rx: dropped message: buffer full: %u\n", chan->index);
+		goto out;
 	}
+	// can't memcpy, need 4-byte word reads
+	for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i)
+		chan->message[i] = msg[i];
+	print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS,
+			     chan->message, MBOX_MAX_MSG_LEN);
+	chan->rx_msg_pending = true;
+	wake_up_interruptible(&chan->wq);
+out:
 	spin_unlock_irqrestore(&chan->lock, flags);
-
-	if (chan->rx_msg_pending)
-		wake_up_interruptible(&chan->wq);
 }
 
 static void mbox_sent(struct mbox_client *client, void *message, int r)
@@ -97,14 +112,22 @@ static void mbox_sent(struct mbox_client *client, void *message, int r)
 						  client);
 	unsigned long flags;
 	spin_lock_irqsave(&chan->lock, flags);
+	if (!chan->channel) {
+		dev_err(chan->tdev->dev,
+			"sent: dropped [N]ACK: mailbox closed: %u\n",
+			chan->index);
+		goto out;
+	}
 	if (r)
-		dev_warn(client->dev, "sent: got NACK: %d\n", r);
+		dev_warn(client->dev, "sent: got NACK: %u: %d\n",
+			 chan->index, r);
 	else
-		dev_info(client->dev, "sent: got ACK\n");
+		dev_info(client->dev, "sent: got ACK: %u\n", chan->index);
 	chan->send_rc = r;
 	chan->send_ack = true;
-	spin_unlock_irqrestore(&chan->lock, flags);
 	wake_up_interruptible(&chan->wq);
+out:
+	spin_unlock_irqrestore(&chan->lock, flags);
 }
 
 static void mbox_client_init(struct mbox_client *cl, struct device *dev,
@@ -137,33 +160,34 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 		return -ENODEV;
 
 	spin_lock_irqsave(&chan->lock, flags);
-
 	if (chan->channel) {
-		dev_info(tdev->dev, "mailbox %u already claimed\n",
+		dev_info(tdev->dev, "open: mailbox already opened: %u\n",
 			 chan->index);
 		ret = -EBUSY;
 		goto out;
 	}
 
-	// only one thread will make it here
 	filp->private_data = chan;
 
+	// reset status fields
 	// We allow reading of outgoing mbox (to get the [N]ACK), but not
 	// writing of incoming mbox.
 	chan->incoming =  (filp->f_mode & FMODE_READ) &&
 			 !(filp->f_mode & FMODE_WRITE);
+	chan->rx_msg_pending = false;
+	chan->send_rc = 0;
+	chan->send_ack = false;
 
+	// open mailbox channel
 	mbox_client_init(&chan->client, tdev->dev, chan->incoming);
-
 	chan->channel = mbox_request_channel(&chan->client, chan->index);
 	if (IS_ERR(chan->channel)) {
-		dev_err(tdev->dev, "request for mbox channel idx %u failed\n",
+		dev_err(tdev->dev, "request for mbox channel failed: %u\n",
 			chan->index);
 		chan->channel = NULL;
 		ret = -EIO;
 		goto out;
 	}
-
 	ret = 0;
 
 out:
@@ -175,11 +199,13 @@ static int mbox_release(struct inode *inodep, struct file *filp)
 {
 	struct mbox_chan_dev *chan = filp->private_data;
 	unsigned long flags;
-	// bad user might share FD among threads
 	spin_lock_irqsave(&chan->lock, flags);
 	if (chan->channel) {
 		mbox_free_channel(chan->channel);
 		chan->channel = NULL;
+	} else {
+		dev_warn(chan->tdev->dev,
+			 "release: mailbox already closed: %u\n", chan->index);
 	}
 	spin_unlock_irqrestore(&chan->lock, flags);
 	return 0;
@@ -193,10 +219,13 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 	unsigned long flags;
 	int ret;
 
-	// bad user might share FD among threads
 	spin_lock_irqsave(&chan->lock, flags);
+	if (!chan->channel) {
+		dev_err(tdev->dev, "write: mailbox closed: %u\n", chan->index);
+		ret = -ENODEV;
+		goto out;
+	}
 
-	BUG_ON(!chan->channel);
 	// file read-only mode should not call this func
 	BUG_ON(chan->incoming);
 
@@ -241,8 +270,13 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 	unsigned long flags;
 	int ret;
 
-	// bad user might share FD among threads
 	spin_lock_irqsave(&chan->lock, flags);
+	if (!chan->channel) {
+		dev_err(chan->tdev->dev, "read: mailbox closed: %u\n",
+			chan->index);
+		ret = -ENODEV;
+		goto out;
+	}
 
 	if (chan->incoming) {
 		if (!chan->rx_msg_pending) {
@@ -281,17 +315,24 @@ out:
 static unsigned int mbox_poll(struct file *filp, poll_table *wait)
 {
 	struct mbox_chan_dev *chan = filp->private_data;
+	unsigned long flags;
         unsigned int rc = 0;
 
         dev_dbg(chan->tdev->dev, "poll\n");
-
         poll_wait(filp, &chan->wq, wait);
 
+	spin_lock_irqsave(&chan->lock, flags);
+	if (!chan->channel) {
+		dev_err(chan->tdev->dev, "poll: mailbox closed: %u\n",
+			chan->index);
+		goto out;
+	}
         if (chan->rx_msg_pending || chan->send_ack)
                 rc |= POLLIN | POLLRDNORM;
         if (!chan->send_ack)
                 rc |= POLLOUT | POLLWRNORM;
-
+out:
+	spin_unlock_irqrestore(&chan->lock, flags);
         dev_dbg(chan->tdev->dev, "poll ret: %d\n", rc);
         return rc;
 }
