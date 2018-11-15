@@ -2,11 +2,11 @@
  * HPSC userspace mailbox client.
  * Provides device files for applications at /dev/mbox/<instance>/mbox<num>.
  */
-#include <linux/atomic.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/fs.h>
+#include <linux/idr.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/mailbox_client.h>
@@ -14,7 +14,6 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
-#include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
@@ -64,7 +63,7 @@ struct mbox_chan_dev {
 // May be multiple mailbox instances
 // Therefore, manage class at module init/exit, not device probe/remove
 static struct class *class;
-static atomic_t num_clients = ATOMIC_INIT(0);
+static DEFINE_IDA(mbox_ida);
 
 static void mbox_received(struct mbox_client *client, void *message)
 {
@@ -427,10 +426,10 @@ static int mbox_client_dev_init(struct mbox_client_dev *tdev,
 	}
 	tdev->major_num = MAJOR(dev);
 
-	tdev->instance = atomic_inc_return(&num_clients) - 1;
+	tdev->instance = ida_simple_get(&mbox_ida, 0, 0, GFP_KERNEL);
 	ret = mbox_create_dev_files(tdev);
 	if (ret) {
-		atomic_dec(&num_clients);
+		ida_simple_remove(&mbox_ida, tdev->instance);
 		unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
 		return ret;
 	}
@@ -467,7 +466,7 @@ static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
 	for (i = tdev->num_chans - 1; i >= 0; --i)
 		mbox_chan_dev_destroy(&tdev->chans[i]);
 
-	atomic_dec(&num_clients);
+	ida_simple_remove(&mbox_ida, tdev->instance);
 	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
 
 	dev_info(&pdev->dev, "unregistered\n");
@@ -511,6 +510,7 @@ static void __exit hpsc_mbox_userspace_exit(void)
 	pr_info("hpsc-mbox-userspace: exit\n");
 	platform_driver_unregister(&hpsc_mbox_userspace_driver);
 	class_destroy(class);
+	ida_destroy(&mbox_ida);
 }
 
 MODULE_DESCRIPTION("HPSC mailbox userspace interface");
