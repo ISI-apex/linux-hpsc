@@ -138,7 +138,17 @@ static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
 	unsigned i;
 	u32 *msg = (u32 *)data;
 
-	if (msg) {
+	if (!msg) {
+		// this is an ACK
+		dev_dbg(mbox->controller.dev, "ACK: set int B\n");
+		writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
+	} else if (IS_ERR(msg)) {
+		// this is a NACK
+		// TODO: use a different event than ACK
+		dev_dbg(mbox->controller.dev, "NACK: set int C: %ld\n",
+			PTR_ERR(msg));
+		writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
+	} else {
 		dev_dbg(mbox->controller.dev, "send: ");
 		for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i) {
 			writel(msg[i], chan->regs + REG_DATA + i * 4);
@@ -148,9 +158,6 @@ static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
 
 		dev_dbg(mbox->controller.dev, "set int A\n");
 		writel(HPSC_MBOX_EVENT_A, chan->regs + REG_EVENT_SET);
-	} else {
-		dev_dbg(mbox->controller.dev, "set int B\n");
-		writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
 	}
 
 	return 0;
