@@ -42,23 +42,13 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev,
 						  client);
 	unsigned long flags;
+	int ret;
 	dev_info(cl->dev, "rx_callback\n");
 	spin_lock_irqsave(&cdev->lock, flags);
 	// handle message synchronously
-	if (IS_ERR(cdev->channel)) {
-		// Note: Shouldn't happen currently, but in the future...?
-		// Message that was pending when we opened the channel, but
-		// we were forced to close it because of other channel failures.
-		// Dump the message and issue a NACK.
-		dev_err(cl->dev, "Pending message cannot be processed!\n");
-		print_hex_dump_bytes("rx_callback", DUMP_PREFIX_ADDRESS, msg,
-				     HPSC_MBOX_MSG_LEN);
-		mbox_send_message(cdev->channel, ERR_PTR(-EPIPE));
-	} else {
-		hpsc_notif_recv(msg, HPSC_MBOX_MSG_LEN);
-		// Tell the controller to issue the ACK.
-		mbox_send_message(cdev->channel, NULL);
-	}
+	ret = hpsc_notif_recv(msg, HPSC_MBOX_MSG_LEN);
+	// tell the controller to issue the ACK (NULL if !ret) or NACK
+	mbox_send_message(cdev->channel, ERR_PTR(ret));
 	spin_unlock_irqrestore(&cdev->lock, flags);
 }
 
@@ -176,7 +166,7 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 		spin_lock_irqsave(&cdev->lock, flags[i]);
 		cdev->channel = mbox_request_channel(&cdev->client, i);
 		if (IS_ERR(cdev->channel)) {
-			dev_err(tdev->dev, "Channel request failed: %u\n", i);
+			dev_err(tdev->dev, "Channel request failed: %d\n", i);
 			ret = PTR_ERR(cdev->channel);
 			spin_unlock_irqrestore(&cdev->lock, flags[i]);
 			goto fail_channel;
@@ -197,7 +187,6 @@ fail_channel:
 	for (i--; i >= 0; i--) {
 		cdev = &tdev->chans[i];
 		mbox_free_channel(cdev->channel);
-		cdev->channel = NULL;
 		spin_unlock_irqrestore(&cdev->lock, flags[i]);
 	}
 	return ret;
