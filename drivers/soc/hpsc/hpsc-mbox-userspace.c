@@ -75,6 +75,12 @@ struct mbox_chan_dev {
 static struct class *class;
 static DEFINE_IDA(mbox_ida);
 
+static int hpsc_mbox_rx_ack(struct mbox_chan_dev *chan, int err)
+{
+	// 0 is an ACK, anything else is a NACK
+	return mbox_send_message(chan->channel, err ? ERR_PTR(err) : NULL);
+}
+
 static void mbox_received(struct mbox_client *client, void *message)
 {
 	struct mbox_chan_dev *chan = container_of(client, struct mbox_chan_dev,
@@ -93,6 +99,8 @@ static void mbox_received(struct mbox_client *client, void *message)
 	if (chan->rx_msg_pending) {
 		dev_err(chan->tdev->dev,
 			"rx: dropped message: buffer full: %u\n", chan->index);
+		// send NACK since we're about to drop the message
+		hpsc_mbox_rx_ack(chan, -ENOBUFS);
 		goto out;
 	}
 	// can't memcpy, need 4-byte word reads
@@ -201,6 +209,9 @@ static int mbox_release(struct inode *inodep, struct file *filp)
 	unsigned long flags;
 	spin_lock_irqsave(&chan->lock, flags);
 	if (chan->channel) {
+		if (chan->rx_msg_pending)
+			// send NACK since we're about to drop the message
+			hpsc_mbox_rx_ack(chan, -EPIPE);
 		mbox_free_channel(chan->channel);
 		chan->channel = NULL;
 	} else {
@@ -292,7 +303,7 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 		// taken the message from the kernel, so the remote sender may send
 		// the next message, with the guarantee that we have an empty buffer
 		// to accept it (since we have a buffer of size 1 message only).
-		mbox_send_message(chan->channel, NULL);
+		hpsc_mbox_rx_ack(chan, 0);
 	} else { // outgoing, return the ACK
 		if (!chan->send_ack) {
 			ret = -EAGAIN;
