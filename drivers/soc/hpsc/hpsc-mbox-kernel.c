@@ -39,7 +39,8 @@ struct mbox_client_dev {
 
 static void client_rx_callback(struct mbox_client *cl, void *msg)
 {
-	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev, client);
+	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev,
+						  client);
 	unsigned long flags;
 	dev_info(cl->dev, "rx_callback\n");
 	spin_lock_irqsave(&cdev->lock, flags);
@@ -48,10 +49,11 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 		// Note: Shouldn't happen currently, but in the future...?
 		// Message that was pending when we opened the channel, but
 		// we were forced to close it because of other channel failures.
-		// Dump the message, but don't ACK it
+		// Dump the message and issue a NACK.
 		dev_err(cl->dev, "Pending message cannot be processed!\n");
 		print_hex_dump_bytes("rx_callback", DUMP_PREFIX_ADDRESS, msg,
 				     HPSC_MBOX_MSG_LEN);
+		mbox_send_message(cdev->channel, ERR_PTR(-EPIPE));
 	} else {
 		hpsc_notif_recv(msg, HPSC_MBOX_MSG_LEN);
 		// Tell the controller to issue the ACK.
@@ -63,7 +65,8 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 static void client_tx_done(struct mbox_client *cl, void *msg, int r)
 {
 	// received a [N]ACK from previous message
-	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev, client);
+	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev,
+						  client);
 	unsigned long flags;
 	spin_lock_irqsave(&cdev->lock, flags);
 	cdev->send_ack = true;
@@ -188,7 +191,6 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
 		spin_unlock_irqrestore(&tdev->chans[i].lock, flags[i]);
 
-	dev_info(&pdev->dev, "registered\n");
 	return 0;
 
 fail_channel:
@@ -212,7 +214,6 @@ static int hpsc_mbox_kernel_remove(struct platform_device *pdev)
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
 		mbox_free_channel(tdev->chans[i].channel);
 	// mbox_client_dev instance managed for us
-	dev_info(&pdev->dev, "unregistered\n");
 	return 0;
 }
 
