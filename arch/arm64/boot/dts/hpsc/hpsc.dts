@@ -32,17 +32,16 @@
 	aliases {
 		ethernet0 = &xgmac;
 		serial0 = &uart0;
-		/* Note: watchdog alias values can still be overriden if softdog is loaded first */
-		/* It may be helpful to start at a higher value, like watchdog10 */
-		/* Otherwise SW can parse /sys/class/watchdog/watchdog[N]/ to distinguish between watchdogs */
-		watchdog0 = &hpps_wdt0;
-		watchdog1 = &hpps_wdt1;
-		watchdog2 = &hpps_wdt2;
-		watchdog3 = &hpps_wdt3;
-		watchdog4 = &hpps_wdt4;
-		watchdog5 = &hpps_wdt5;
-		watchdog6 = &hpps_wdt6;
-		watchdog7 = &hpps_wdt7;
+		/* Note: watchdog0 is claimed by softdog since it is loaded first */
+		/* SW can parse /sys/class/watchdog/watchdog[N]/ to distinguish between WDTs */
+		watchdog1 = &hpps_wdt0;
+		watchdog2 = &hpps_wdt1;
+		watchdog3 = &hpps_wdt2;
+		watchdog4 = &hpps_wdt3;
+		watchdog5 = &hpps_wdt4;
+		watchdog6 = &hpps_wdt5;
+		watchdog7 = &hpps_wdt6;
+		watchdog8 = &hpps_wdt7;
 	};
 
 	chosen {
