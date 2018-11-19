@@ -32,7 +32,7 @@
 	aliases {
 		ethernet0 = &xgmac;
 		serial0 = &uart0;
-		/* Note: watchdog0 is claimed by softdog since it is loaded first */
+		/* Note: watchdog0 currently reserved for softdog (default WDT for systemd to kick) */
 		/* SW can parse /sys/class/watchdog/watchdog[N]/ to distinguish between WDTs */
 		watchdog1 = &hpps_wdt0;
 		watchdog2 = &hpps_wdt1;
