@@ -68,6 +68,20 @@ static struct hpsc_mbox *hpsc_mbox_link_mbox(struct mbox_chan *link)
 	return container_of(link->mbox, struct hpsc_mbox, controller);
 }
 
+static void hpsc_mbox_memcpy_toio(void __iomem *dest, void *src)
+{
+	int i;
+	for (i = 0; i < HPSC_MBOX_DATA_REGS; i++)
+		writel(((u32 *)src)[i], dest + i * 4);
+}
+
+static void hpsc_mbox_memcpy_fromio(void *dest, void __iomem *src)
+{
+	int i;
+	for (i = 0; i < HPSC_MBOX_DATA_REGS; i++)
+		((u32 *)dest)[i] = readl(src + i * 4);
+}
+
 static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 				 unsigned interrupt)
 {
@@ -75,6 +89,7 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 	struct hpsc_mbox_chan *chan;
 	unsigned i;
 	u32 event_cause, int_enable;
+	u32 data[HPSC_MBOX_DATA_REGS];
 
 	// Check all mailbox instances; could do better if we maintain another
 	// list of actually enabled mailboxes; could do even better if HW
@@ -100,8 +115,8 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 		// the disambiguation code in both ISRs or using callbacks
 		switch (event) {
 		case HPSC_MBOX_EVENT_A:
-			// TODO: can client memcpy_fromio?
-			mbox_chan_received_data(link, chan->regs + REG_DATA);
+			hpsc_mbox_memcpy_fromio(data, chan->regs + REG_DATA);
+			mbox_chan_received_data(link, data);
 			break;
 		case HPSC_MBOX_EVENT_B:
 			mbox_chan_txdone(link, /* status = OK */ 0);
@@ -135,27 +150,19 @@ static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
 {
 	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
 	struct hpsc_mbox_chan *chan = link->con_priv;
-	unsigned i;
-	u32 *msg = (u32 *)data;
 
-	if (!msg) {
+	if (!data) {
 		// this is an ACK
 		dev_dbg(mbox->controller.dev, "ACK: set int B\n");
 		writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
-	} else if (IS_ERR(msg)) {
+	} else if (IS_ERR(data)) {
 		// this is a NACK
 		// TODO: use a different event than ACK
 		dev_dbg(mbox->controller.dev, "NACK: set int C: %ld\n",
-			PTR_ERR(msg));
+			PTR_ERR(data));
 		writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
 	} else {
-		dev_dbg(mbox->controller.dev, "send: ");
-		for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i) {
-			writel(msg[i], chan->regs + REG_DATA + i * 4);
-			dev_dbg(mbox->controller.dev, "%08X ", msg[i]);
-		}
-		dev_dbg(mbox->controller.dev, "\n");
-
+		hpsc_mbox_memcpy_toio(chan->regs + REG_DATA, data);
 		dev_dbg(mbox->controller.dev, "set int A\n");
 		writel(HPSC_MBOX_EVENT_A, chan->regs + REG_EVENT_SET);
 	}
