@@ -47,15 +47,6 @@ EXPORT_SYMBOL_GPL(hpsc_msg_lifecycle);
  * The remainder of this file is for processing received messages.
  */
 
-static void msgcpy(unsigned char *dest, const unsigned char *src)
-{
-	// Note: can't use memcpy if mailbox was source; copy a word at a time
-	size_t i;
-	BUG_ON(HPSC_MSG_SIZE % sizeof(u32) != 0);
-	for (i = 0; i < HPSC_MSG_SIZE / sizeof(u32); i++)
-		((u32 *)dest)[i] = ((u32 *)src)[i];
-}
-
 static int msg_cb_nop(const unsigned char *msg)
 {
 	pr_info("hpsc-msg: received NOP\n");
@@ -67,7 +58,7 @@ static int msg_cb_ping(const unsigned char *msg)
 	HPSC_MSG_DEFINE(res);
 	pr_info("hpsc-msg: received PING, replying with PONG\n");
 	// reply with pong and echo payload back
-	msgcpy(res, msg);
+	memcpy(res, msg, HPSC_MSG_SIZE);
 	res[0] = PONG;
 	hpsc_notif_send(res, sizeof(res));
 	return 0;

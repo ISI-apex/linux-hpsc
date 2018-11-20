@@ -86,10 +86,10 @@ static void mbox_received(struct mbox_client *client, void *message)
 	struct mbox_chan_dev *chan = container_of(client, struct mbox_chan_dev,
 						  client);
 	unsigned long flags;
-	u32 *msg = message;
-	unsigned i;
 
 	spin_lock_irqsave(&chan->lock, flags);
+	print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS, message,
+			     MBOX_MAX_MSG_LEN);
 	if (!chan->channel) {
 		dev_err(chan->tdev->dev,
 			"rx: dropped message: mailbox closed: %u\n",
@@ -103,11 +103,7 @@ static void mbox_received(struct mbox_client *client, void *message)
 		hpsc_mbox_rx_ack(chan, -ENOBUFS);
 		goto out;
 	}
-	// can't memcpy, need 4-byte word reads
-	for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i)
-		chan->message[i] = msg[i];
-	print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS,
-			     chan->message, MBOX_MAX_MSG_LEN);
+	memcpy(chan->message, message, MBOX_MAX_MSG_LEN);
 	chan->rx_msg_pending = true;
 	wake_up_interruptible(&chan->wq);
 out:
