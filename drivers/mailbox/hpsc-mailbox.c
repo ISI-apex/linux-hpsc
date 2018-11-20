@@ -94,15 +94,37 @@ static void hpsc_mbox_send_ack(struct hpsc_mbox_chan *chan, int r)
 	}
 }
 
+static bool hpsc_mbox_is_subscribed(struct hpsc_mbox_chan *chan, unsigned event,
+				    unsigned interrupt)
+{
+	// Are we 'signed up' for this event (A) from this channel?
+	// Two criteria: (1) Cause (or Status) is set, and (2) Mapped to our IRQ
+	u32 val = readl(chan->regs + REG_EVENT_CAUSE);
+	if (!(val & event)) {
+		val = readl(chan->regs + REG_EVENT_STATUS);
+		if (!(val & event))
+			return false;
+	}
+	val = readl(chan->regs + REG_INT_ENABLE);
+	if (!(val & interrupt))
+		return false;
+	return true;
+}
+
+static void hpsc_mbox_clear_event(struct hpsc_mbox_chan *chan, unsigned event)
+{
+	dev_dbg(chan->mbox->controller.dev, "clear event: %u\n", event);
+	writel(event, chan->regs + REG_EVENT_CLEAR);
+}
+
 static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 				 unsigned interrupt)
 {
+	u32 data[HPSC_MBOX_DATA_REGS];
 	struct mbox_chan *link;
 	struct hpsc_mbox_chan *chan;
 	unsigned long flags;
 	unsigned i;
-	u32 event_cause, int_enable;
-	u32 data[HPSC_MBOX_DATA_REGS];
 
 	// Check all mailbox instances; could do better if we maintain another
 	// list of actually enabled mailboxes; could do even better if HW
@@ -111,14 +133,7 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 		link = &mbox->controller.chans[i];
 		chan = link->con_priv;
 
-		// Are we 'signed up' for this event (A) from this mailbox (i)?
-		// Two criteria: (1) Cause (or Status) is set, and (2) Mapped to
-		// our IRQ
-		event_cause = readl(chan->regs + REG_EVENT_CAUSE);
-		if (!(event_cause & event))
-			continue;
-		int_enable = readl(chan->regs + REG_INT_ENABLE);
-		if (!(int_enable & interrupt))
+		if (!hpsc_mbox_is_subscribed(chan, event, interrupt))
 			continue;
 
 		dev_dbg(mbox->controller.dev, "ISR %u instance %u\n", event,
@@ -148,8 +163,7 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 			mbox_chan_txdone(link, /* status = OK */ 0);
 			break;
 		}
-		dev_dbg(mbox->controller.dev, "clear event %u\n", event);
-		writel(event, chan->regs + REG_EVENT_CLEAR);
+		hpsc_mbox_clear_event(chan, event);
 	}
 	return IRQ_HANDLED;
 }
@@ -309,10 +323,27 @@ static void hpsc_mbox_shutdown(struct mbox_chan *link)
 	hpsc_mbox_maybe_release_owner(chan);
 }
 
+static bool hpsc_mbox_peek_data(struct mbox_chan *link)
+{
+	u32 data[HPSC_MBOX_DATA_REGS];
+	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
+	struct hpsc_mbox_chan *chan = link->con_priv;
+	bool ret = hpsc_mbox_is_subscribed(chan, HPSC_MBOX_EVENT_A,
+					   HPSC_MBOX_INT_A(mbox->rcv_int_idx));
+	dev_dbg(mbox->controller.dev, "peek: %s\n", ret ? "true" : "false");
+	if (ret) {
+		hpsc_mbox_memcpy_fromio(data, chan->regs + REG_DATA);
+		mbox_chan_received_data(link, data);
+		hpsc_mbox_clear_event(chan, HPSC_MBOX_EVENT_A);
+	}
+	return ret;
+}
+
 static const struct mbox_chan_ops hpsc_mbox_chan_ops = {
 	.startup	= hpsc_mbox_startup,
 	.shutdown	= hpsc_mbox_shutdown,
 	.send_data	= hpsc_mbox_send_data,
+	.peek_data	= hpsc_mbox_peek_data,
 };
 
 /* Parse the channel identifiers from client's device tree node */

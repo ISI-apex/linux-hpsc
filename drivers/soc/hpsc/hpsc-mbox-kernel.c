@@ -179,6 +179,8 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	// Finally, release the lock to start processing any pending messages
 	for (i = DT_MBOXES_COUNT - 1; i >= 0; i--)
 		spin_unlock_irqrestore(&tdev->chans[i].lock, flags[i]);
+	// poll for waiting message
+	mbox_client_peek_data(tdev->chans[DT_MBOX_IN].channel);
 
 	return 0;
 
