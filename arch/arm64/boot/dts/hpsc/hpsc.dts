@@ -449,7 +449,7 @@
 			*/
 		};
 
-		mailbox_client_rpts {
+		mailbox_client_rtps {
 			compatible = "hpsc-mbox-userspace";
 			mboxes =  /* ip block, instance index, owner, src, dest */
 				    <&rtps_mbox   0     0                    0 0>,
