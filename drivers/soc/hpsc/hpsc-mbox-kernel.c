@@ -71,7 +71,8 @@ static int hpsc_mbox_kernel_send(struct notifier_block *nb,
 				 unsigned long action, void *msg)
 {
 	// send message synchronously
-	struct mbox_client_dev *tdev = container_of(nb, struct mbox_client_dev, nb);
+	struct mbox_client_dev *tdev = container_of(nb, struct mbox_client_dev,
+						    nb);
 	struct mbox_chan_dev *cdev = &tdev->chans[DT_MBOX_OUT];
 	unsigned long flags;
 	int ret;
@@ -86,8 +87,6 @@ static int hpsc_mbox_kernel_send(struct notifier_block *nb,
 	if (ret >= 0) {
 		cdev->send_ack = false;
 		ret = NOTIFY_STOP;
-	} else if (ret == -EAGAIN) {
-		ret = NOTIFY_STOP_MASK | EAGAIN;
 	} else {
 		dev_err(tdev->dev, "Failed to send mailbox message: %d\n", ret);
 		// need the positive error code value
