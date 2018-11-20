@@ -82,11 +82,24 @@ static void hpsc_mbox_memcpy_fromio(void *dest, void __iomem *src)
 		((u32 *)dest)[i] = readl(src + i * 4);
 }
 
+static void hpsc_mbox_send_ack(struct hpsc_mbox_chan *chan, int r)
+{
+	if (unlikely(r)) {
+		// TODO: use a different event than ACK
+		dev_dbg(chan->mbox->controller.dev, "NACK: set int C: %d\n", r);
+		writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
+	} else {
+		dev_dbg(chan->mbox->controller.dev, "ACK: set int B\n");
+		writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
+	}
+}
+
 static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 				 unsigned interrupt)
 {
 	struct mbox_chan *link;
 	struct hpsc_mbox_chan *chan;
+	unsigned long flags;
 	unsigned i;
 	u32 event_cause, int_enable;
 	u32 data[HPSC_MBOX_DATA_REGS];
@@ -115,14 +128,26 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 		// the disambiguation code in both ISRs or using callbacks
 		switch (event) {
 		case HPSC_MBOX_EVENT_A:
-			hpsc_mbox_memcpy_fromio(data, chan->regs + REG_DATA);
-			mbox_chan_received_data(link, data);
+			// Locking so client isn't destroyed while we process,
+			// but the mailbox itself may still be shutdown
+			spin_lock_irqsave(&link->lock, flags);
+			if (likely(link->cl)) {
+				hpsc_mbox_memcpy_fromio(data,
+							chan->regs + REG_DATA);
+				mbox_chan_received_data(link, data);
+			} else {
+				dev_warn(mbox->controller.dev,
+					 "chan closed before IRQ handled: %u\n",
+					 chan->instance);
+				hpsc_mbox_send_ack(chan, -ENOLINK);
+			}
+			spin_unlock_irqrestore(&link->lock, flags);
 			break;
 		case HPSC_MBOX_EVENT_B:
+			// can't use link lock here, but we don't actually care
 			mbox_chan_txdone(link, /* status = OK */ 0);
 			break;
 		}
-
 		dev_dbg(mbox->controller.dev, "clear event %u\n", event);
 		writel(event, chan->regs + REG_EVENT_CLEAR);
 	}
@@ -151,16 +176,8 @@ static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
 	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
 	struct hpsc_mbox_chan *chan = link->con_priv;
 
-	if (!data) {
-		// this is an ACK
-		dev_dbg(mbox->controller.dev, "ACK: set int B\n");
-		writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
-	} else if (IS_ERR(data)) {
-		// this is a NACK
-		// TODO: use a different event than ACK
-		dev_dbg(mbox->controller.dev, "NACK: set int C: %ld\n",
-			PTR_ERR(data));
-		writel(HPSC_MBOX_EVENT_B, chan->regs + REG_EVENT_SET);
+	if (IS_ERR_OR_NULL(data)) {
+		hpsc_mbox_send_ack(chan, PTR_ERR_OR_ZERO(data));
 	} else {
 		hpsc_mbox_memcpy_toio(chan->regs + REG_DATA, data);
 		dev_dbg(mbox->controller.dev, "set int A\n");
