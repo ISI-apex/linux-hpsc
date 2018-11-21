@@ -146,24 +146,28 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 			// Locking so client isn't destroyed while we process,
 			// but the mailbox itself may still be shutdown
 			spin_lock_irqsave(&link->lock, flags);
+			// Events should be cleared before sending new messages
+			// or [N]ACKs, otherwise IRQ may be raised again
 			if (likely(link->cl)) {
 				hpsc_mbox_memcpy_fromio(data,
 							chan->regs + REG_DATA);
+				hpsc_mbox_clear_event(chan, event);
 				mbox_chan_received_data(link, data);
 			} else {
 				dev_warn(mbox->controller.dev,
 					 "chan closed before IRQ handled: %u\n",
 					 chan->instance);
+				hpsc_mbox_clear_event(chan, event);
 				hpsc_mbox_send_ack(chan, -ENOLINK);
 			}
 			spin_unlock_irqrestore(&link->lock, flags);
 			break;
 		case HPSC_MBOX_EVENT_B:
 			// can't use link lock here, but we don't actually care
+			hpsc_mbox_clear_event(chan, event);
 			mbox_chan_txdone(link, /* status = OK */ 0);
 			break;
 		}
-		hpsc_mbox_clear_event(chan, event);
 	}
 	return IRQ_HANDLED;
 }
@@ -333,8 +337,8 @@ static bool hpsc_mbox_peek_data(struct mbox_chan *link)
 	dev_dbg(mbox->controller.dev, "peek: %s\n", ret ? "true" : "false");
 	if (ret) {
 		hpsc_mbox_memcpy_fromio(data, chan->regs + REG_DATA);
-		mbox_chan_received_data(link, data);
 		hpsc_mbox_clear_event(chan, HPSC_MBOX_EVENT_A);
+		mbox_chan_received_data(link, data);
 	}
 	return ret;
 }
