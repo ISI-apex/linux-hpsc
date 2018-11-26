@@ -137,7 +137,7 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev;
 	struct mbox_chan_dev *cdev;
-	unsigned long flags[DT_MBOXES_COUNT];
+	unsigned long flags;
 	int i;
 	int ret;
 
@@ -159,15 +159,14 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 
 	// We must delay processing of pending messages until we've registered
 	// with notif handler, which requires all channels to be open.
-	// First, lock each channel before opening them
+	// First, lock the inbound mailbox, then open channels
+	spin_lock_irqsave(&tdev->chans[DT_MBOX_IN].lock, flags);
 	for (i = 0; i < DT_MBOXES_COUNT; i++) {
 		cdev = &tdev->chans[i];
-		spin_lock_irqsave(&cdev->lock, flags[i]);
 		cdev->channel = mbox_request_channel(&cdev->client, i);
 		if (IS_ERR(cdev->channel)) {
 			dev_err(tdev->dev, "Channel request failed: %d\n", i);
 			ret = PTR_ERR(cdev->channel);
-			spin_unlock_irqrestore(&cdev->lock, flags[i]);
 			goto fail_channel;
 		}
 	}
@@ -177,19 +176,16 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	ret = hpsc_notif_register(&tdev->nb);
 	BUG_ON(ret); // we should be the only mailbox handler
 	// Finally, release the lock to start processing any pending messages
-	for (i = DT_MBOXES_COUNT - 1; i >= 0; i--)
-		spin_unlock_irqrestore(&tdev->chans[i].lock, flags[i]);
+	spin_unlock_irqrestore(&tdev->chans[DT_MBOX_IN].lock, flags);
 	// poll for waiting message
 	mbox_client_peek_data(tdev->chans[DT_MBOX_IN].channel);
 
 	return 0;
 
 fail_channel:
-	for (i--; i >= 0; i--) {
-		cdev = &tdev->chans[i];
-		mbox_free_channel(cdev->channel);
-		spin_unlock_irqrestore(&cdev->lock, flags[i]);
-	}
+	for (i--; i >= 0; i--)
+		mbox_free_channel(tdev->chans[i].channel);
+	spin_unlock_irqrestore(&tdev->chans[DT_MBOX_IN].lock, flags);
 	return ret;
 }
 
