@@ -123,7 +123,6 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 	u32 data[HPSC_MBOX_DATA_REGS];
 	struct mbox_chan *link;
 	struct hpsc_mbox_chan *chan;
-	unsigned long flags;
 	unsigned i;
 
 	// Check all mailbox instances; could do better if we maintain another
@@ -143,9 +142,11 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 		// the disambiguation code in both ISRs or using callbacks
 		switch (event) {
 		case HPSC_MBOX_EVENT_A:
-			// Locking so client isn't destroyed while we process,
-			// but the mailbox itself may still be shutdown
-			spin_lock_irqsave(&link->lock, flags);
+			// Note: Race condition on link->cl between if statement
+			// and mbox_chan_received_data, but using link->lock as
+			// a guard can deadlock. Since this is only an
+			// optimization to send NACKs, worst case scenario is
+			// that we don't NACK if channel is closed.
 			// Events should be cleared before sending new messages
 			// or [N]ACKs, otherwise IRQ may be raised again
 			if (likely(link->cl)) {
@@ -160,7 +161,6 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 				hpsc_mbox_clear_event(chan, event);
 				hpsc_mbox_send_ack(chan, -ENOLINK);
 			}
-			spin_unlock_irqrestore(&link->lock, flags);
 			break;
 		case HPSC_MBOX_EVENT_B:
 			// can't use link lock here, but we don't actually care
