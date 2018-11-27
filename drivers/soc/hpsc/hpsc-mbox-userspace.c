@@ -160,7 +160,7 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	unsigned int minor = iminor(inodep);
 	int ret;
 
-	if (major != tdev->major_num || minor >= tdev->num_chans)
+	if (major != tdev->major_num || minor >= (unsigned int) tdev->num_chans)
 		return -ENODEV;
 
 	spin_lock_irqsave(&chan->lock, flags);
@@ -224,7 +224,7 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 	struct mbox_chan_dev *chan = filp->private_data;
 	struct mbox_client_dev *tdev = chan->tdev;
 	unsigned long flags;
-	int ret;
+	ssize_t ret;
 
 	spin_lock_irqsave(&chan->lock, flags);
 	if (!chan->channel) {
@@ -265,9 +265,10 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 
 	// Note: successful return here does not indicate successful receipt of
 	//       sent message by the other end
+	ret = count;
 out:
 	spin_unlock_irqrestore(&chan->lock, flags);
-	return ret < 0 ? ret : count;
+	return ret;
 }
 
 static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
@@ -275,7 +276,7 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 {
 	struct mbox_chan_dev *chan = filp->private_data;
 	unsigned long flags;
-	int ret;
+	ssize_t ret;
 
 	spin_lock_irqsave(&chan->lock, flags);
 	if (!chan->channel) {
@@ -291,7 +292,7 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 			goto out;
 		}
 
-		ret = simple_read_from_buffer(userbuf, MBOX_MAX_MSG_LEN, ppos,
+		ret = simple_read_from_buffer(userbuf, count, ppos,
 					      chan->message, MBOX_MAX_MSG_LEN);
 		chan->rx_msg_pending = false;
 
@@ -306,7 +307,7 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 			goto out;
 		}
 
-		ret = simple_read_from_buffer(userbuf, MBOX_MAX_MSG_LEN, ppos,
+		ret = simple_read_from_buffer(userbuf, count, ppos,
 					      &chan->send_rc,
 					      sizeof(chan->send_rc));
 
@@ -415,7 +416,7 @@ static int mbox_create_dev_files(struct mbox_client_dev *tdev)
 
 		} else { // index with a prefix
 			rc = snprintf(devf_name, sizeof(devf_name), "mbox%u", i);
-			if (rc < 0 || rc >= sizeof(devf_name)) {
+			if (rc < 0) {
 				dev_err(tdev->dev,
 					"failed to construct mbox device file name: rc %d\n",
 					rc);
