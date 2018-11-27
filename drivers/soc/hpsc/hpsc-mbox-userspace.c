@@ -90,7 +90,7 @@ static void mbox_received(struct mbox_client *client, void *message)
 	spin_lock_irqsave(&chan->lock, flags);
 	print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS, message,
 			     MBOX_MAX_MSG_LEN);
-	if (!chan->channel) {
+	if (unlikely(!chan->channel)) {
 		dev_err(chan->tdev->dev,
 			"rx: dropped message: mailbox closed: %u\n",
 			chan->index);
@@ -116,7 +116,7 @@ static void mbox_sent(struct mbox_client *client, void *message, int r)
 						  client);
 	unsigned long flags;
 	spin_lock_irqsave(&chan->lock, flags);
-	if (!chan->channel) {
+	if (unlikely(!chan->channel)) {
 		dev_err(chan->tdev->dev,
 			"sent: dropped [N]ACK: mailbox closed: %u\n",
 			chan->index);
@@ -227,7 +227,7 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 	ssize_t ret;
 
 	spin_lock_irqsave(&chan->lock, flags);
-	if (!chan->channel) {
+	if (unlikely(!chan->channel)) {
 		dev_err(tdev->dev, "write: mailbox closed: %u\n", chan->index);
 		ret = -ENODEV;
 		goto out;
@@ -279,7 +279,7 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 	ssize_t ret;
 
 	spin_lock_irqsave(&chan->lock, flags);
-	if (!chan->channel) {
+	if (unlikely(!chan->channel)) {
 		dev_err(chan->tdev->dev, "read: mailbox closed: %u\n",
 			chan->index);
 		ret = -ENODEV;
@@ -330,7 +330,7 @@ static unsigned int mbox_poll(struct file *filp, poll_table *wait)
         poll_wait(filp, &chan->wq, wait);
 
 	spin_lock_irqsave(&chan->lock, flags);
-	if (!chan->channel) {
+	if (unlikely(!chan->channel)) {
 		dev_err(chan->tdev->dev, "poll: mailbox closed: %u\n",
 			chan->index);
 		goto out;
