@@ -176,15 +176,12 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	ret = hpsc_notif_register(&tdev->nb);
 	BUG_ON(ret); // we should be the only mailbox handler
 	// Finally, release the lock to start processing any pending messages
-	spin_unlock_irqrestore(&tdev->chans[DT_MBOX_IN].lock, flags);
-	// poll for waiting message
-	mbox_client_peek_data(tdev->chans[DT_MBOX_IN].channel);
-
-	return 0;
+	goto out;
 
 fail_channel:
 	for (i--; i >= 0; i--)
 		mbox_free_channel(tdev->chans[i].channel);
+out:
 	spin_unlock_irqrestore(&tdev->chans[DT_MBOX_IN].lock, flags);
 	return ret;
 }
