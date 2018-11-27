@@ -133,11 +133,19 @@ static void hpsc_mbox_chan_dev_init(struct mbox_chan_dev *cdev,
 	cdev->send_ack = true;
 }
 
+static int hpsc_mbox_kernel_request_chan(struct mbox_chan_dev *cdev, int i)
+{
+	cdev->channel = mbox_request_channel(&cdev->client, i);
+	if (IS_ERR(cdev->channel)) {
+		dev_err(cdev->tdev->dev, "Channel request failed: %d\n", i);
+		return PTR_ERR(cdev->channel);
+	}
+	return 0;
+}
+
 static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev;
-	struct mbox_chan_dev *cdev;
-	unsigned long flags;
 	int i;
 	int ret;
 
@@ -157,33 +165,29 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
 		hpsc_mbox_chan_dev_init(&tdev->chans[i], tdev, i);
 
-	// We must delay processing of pending messages until we've registered
-	// with notif handler, which requires all channels to be open.
-	// First, lock the inbound mailbox, then open channels
-	spin_lock_irqsave(&tdev->chans[DT_MBOX_IN].lock, flags);
-	for (i = 0; i < DT_MBOXES_COUNT; i++) {
-		cdev = &tdev->chans[i];
-		cdev->channel = mbox_request_channel(&cdev->client, i);
-		if (IS_ERR(cdev->channel)) {
-			dev_err(tdev->dev, "Channel request failed: %d\n", i);
-			ret = PTR_ERR(cdev->channel);
-			goto fail_channel;
-		}
-	}
-	// Now register with notification handler
+	// Can't use spin_lock_irqsave around mbox_request_channel since the
+	// latter uses a mutex and might sleep.
+	// So, we open the outbound channel first, register with notif handler,
+	// then finally open the inbound channel. Inbound may quickly receive
+	// a rx interrupt, but that's OK because outbound is registered and
+	// ready to send any synchronous response.
+	ret = hpsc_mbox_kernel_request_chan(&tdev->chans[DT_MBOX_OUT],
+					    DT_MBOX_OUT);
+	if (ret)
+		return ret;
 	tdev->nb.notifier_call = hpsc_mbox_kernel_send;
 	tdev->nb.priority = HPSC_NOTIF_PRIORITY_MAILBOX;
 	ret = hpsc_notif_register(&tdev->nb);
 	BUG_ON(ret); // we should be the only mailbox handler
-	// Finally, release the lock to start processing any pending messages
-	goto out;
+	ret = hpsc_mbox_kernel_request_chan(&tdev->chans[DT_MBOX_IN],
+					    DT_MBOX_IN);
+	if (ret) {
+		mbox_free_channel(tdev->chans[DT_MBOX_OUT].channel);
+		hpsc_notif_unregister(&tdev->nb);
+		return ret;
+	}
 
-fail_channel:
-	for (i--; i >= 0; i--)
-		mbox_free_channel(tdev->chans[i].channel);
-out:
-	spin_unlock_irqrestore(&tdev->chans[DT_MBOX_IN].lock, flags);
-	return ret;
+	return 0;
 }
 
 static int hpsc_mbox_kernel_remove(struct platform_device *pdev)
