@@ -123,7 +123,7 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 	u32 data[HPSC_MBOX_DATA_REGS];
 	struct mbox_chan *link;
 	struct hpsc_mbox_chan *chan;
-	unsigned i;
+	int i;
 
 	// Check all mailbox instances; could do better if we maintain another
 	// list of actually enabled mailboxes; could do even better if HW
@@ -376,11 +376,11 @@ static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
 }
 
 static void hpsc_mbox_chans_init(struct hpsc_mbox_chan *hpsc_chans,
-				 unsigned num_chans, struct hpsc_mbox *mbox,
+				 int num_chans, struct hpsc_mbox *mbox,
 				 struct mbox_chan *mbox_chans)
 {
 	struct hpsc_mbox_chan *chan;
-	unsigned i;
+	int i;
 	for (i = 0; i < num_chans; i++) {
 		chan = &hpsc_chans[i];
 		chan->mbox = mbox;
