@@ -192,9 +192,6 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 		ret = -EIO;
 		goto out;
 	}
-	if (chan->incoming)
-		// poll for waiting message
-		mbox_client_peek_data(chan->channel);
 	ret = 0;
 
 out:
