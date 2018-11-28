@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
+#include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
@@ -39,7 +40,7 @@ struct mbox_client_dev {
 };
 
 /*
- * Locking must protect against the follwing:
+ * Locking must protect against the following:
  * First, interrupts from the mailbox API and user operations can race.
  * Second, a userspace app might share file descriptors between threads and race
  * on file operations.
@@ -87,26 +88,27 @@ static void mbox_received(struct mbox_client *client, void *message)
 						  client);
 	unsigned long flags;
 
-	spin_lock_irqsave(&chan->lock, flags);
 	print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS, message,
 			     MBOX_MAX_MSG_LEN);
-	if (unlikely(!chan->channel)) {
-		dev_err(chan->tdev->dev,
-			"rx: dropped message: mailbox closed: %u\n",
-			chan->index);
-		goto out;
-	}
+
+	spin_lock_irqsave(&chan->lock, flags);
 	if (chan->rx_msg_pending) {
 		dev_err(chan->tdev->dev,
 			"rx: dropped message: buffer full: %u\n", chan->index);
-		// send NACK since we're about to drop the message
-		hpsc_mbox_rx_ack(chan, -ENOBUFS);
-		goto out;
+		// Send NACK since we're about to drop the message
+		// Race with channel assignment in mbox_open: might still be ERR
+		// But, we won't NACK the first message so channel should be OK
+		if (unlikely(IS_ERR_OR_NULL(chan->channel)))
+			// More than one message received before channel
+			// assignment? Can't NACK, but it's the sender's fault
+			dev_warn(chan->tdev->dev, "rx: can't NACK message\n");
+		else
+			hpsc_mbox_rx_ack(chan, -ENOBUFS);
+	} else {
+		memcpy(chan->message, message, MBOX_MAX_MSG_LEN);
+		chan->rx_msg_pending = true;
+		wake_up_interruptible(&chan->wq);
 	}
-	memcpy(chan->message, message, MBOX_MAX_MSG_LEN);
-	chan->rx_msg_pending = true;
-	wake_up_interruptible(&chan->wq);
-out:
 	spin_unlock_irqrestore(&chan->lock, flags);
 }
 
@@ -115,22 +117,24 @@ static void mbox_sent(struct mbox_client *client, void *message, int r)
 	struct mbox_chan_dev *chan = container_of(client, struct mbox_chan_dev,
 						  client);
 	unsigned long flags;
-	spin_lock_irqsave(&chan->lock, flags);
-	if (unlikely(!chan->channel)) {
-		dev_err(chan->tdev->dev,
-			"sent: dropped [N]ACK: mailbox closed: %u\n",
-			chan->index);
-		goto out;
-	}
+
 	if (r)
 		dev_warn(client->dev, "sent: got NACK: %u: %d\n",
 			 chan->index, r);
 	else
 		dev_info(client->dev, "sent: got ACK: %u\n", chan->index);
-	chan->send_rc = r;
-	chan->send_ack = true;
-	wake_up_interruptible(&chan->wq);
-out:
+
+	spin_lock_irqsave(&chan->lock, flags);
+	if (unlikely(IS_ERR_OR_NULL(chan->channel))) {
+		dev_warn(chan->tdev->dev,
+			 "sent: dropped [N]ACK: mailbox closed: %u\n",
+			 chan->index);
+	} else {
+		// multiple [N]ACKs shouldn't happen, but overwrite if they do
+		chan->send_rc = r;
+		chan->send_ack = true;
+		wake_up_interruptible(&chan->wq);
+	}
 	spin_unlock_irqrestore(&chan->lock, flags);
 }
 
@@ -156,23 +160,14 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 						  struct mbox_chan_dev, cdev);
 	struct mbox_client_dev *tdev = chan->tdev;
 	unsigned long flags;
-	unsigned int major = imajor(inodep);
-	unsigned int minor = iminor(inodep);
-	int ret;
-
-	if (major != tdev->major_num || minor >= (unsigned int) tdev->num_chans)
-		return -ENODEV;
 
 	spin_lock_irqsave(&chan->lock, flags);
 	if (chan->channel) {
 		dev_info(tdev->dev, "open: mailbox already opened: %u\n",
 			 chan->index);
-		ret = -EBUSY;
-		goto out;
+		spin_unlock_irqrestore(&chan->lock, flags);
+		return -EBUSY;
 	}
-
-	filp->private_data = chan;
-
 	// reset status fields
 	// We allow reading of outgoing mbox (to get the [N]ACK), but not
 	// writing of incoming mbox.
@@ -181,22 +176,23 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	chan->rx_msg_pending = false;
 	chan->send_rc = 0;
 	chan->send_ack = false;
+	mbox_client_init(&chan->client, tdev->dev, chan->incoming);
+	// non-NULL to prevent race with above if statement before channel open
+	chan->channel = ERR_PTR(-ENODEV);
+	// release lock before requesting channel since mbox_request_channel
+	// uses a mutex and might sleep
+	spin_unlock_irqrestore(&chan->lock, flags);
 
 	// open mailbox channel
-	mbox_client_init(&chan->client, tdev->dev, chan->incoming);
 	chan->channel = mbox_request_channel(&chan->client, chan->index);
 	if (IS_ERR(chan->channel)) {
 		dev_err(tdev->dev, "request for mbox channel failed: %u\n",
 			chan->index);
 		chan->channel = NULL;
-		ret = -EIO;
-		goto out;
+		return -EIO;
 	}
-	ret = 0;
-
-out:
-	spin_unlock_irqrestore(&chan->lock, flags);
-	return ret;
+	filp->private_data = chan;
+	return 0;
 }
 
 static int mbox_release(struct inode *inodep, struct file *filp)
@@ -204,15 +200,15 @@ static int mbox_release(struct inode *inodep, struct file *filp)
 	struct mbox_chan_dev *chan = filp->private_data;
 	unsigned long flags;
 	spin_lock_irqsave(&chan->lock, flags);
-	if (chan->channel) {
+	if (unlikely(IS_ERR_OR_NULL(chan->channel))) {
+		dev_warn(chan->tdev->dev,
+			 "release: mailbox already closed: %u\n", chan->index);
+	} else {
 		if (chan->rx_msg_pending)
 			// send NACK since we're about to drop the message
 			hpsc_mbox_rx_ack(chan, -EPIPE);
 		mbox_free_channel(chan->channel);
 		chan->channel = NULL;
-	} else {
-		dev_warn(chan->tdev->dev,
-			 "release: mailbox already closed: %u\n", chan->index);
 	}
 	spin_unlock_irqrestore(&chan->lock, flags);
 	return 0;
@@ -221,51 +217,45 @@ static int mbox_release(struct inode *inodep, struct file *filp)
 static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 			  size_t count, loff_t *ppos)
 {
+	u32 msg[HPSC_MBOX_DATA_REGS];
 	struct mbox_chan_dev *chan = filp->private_data;
 	struct mbox_client_dev *tdev = chan->tdev;
 	unsigned long flags;
 	ssize_t ret;
 
+	if (count > MBOX_MAX_MSG_LEN) {
+		dev_err(tdev->dev, "message too long: %zd > %d\n", count,
+			MBOX_MAX_MSG_LEN);
+		return -EINVAL;
+	}
+	ret = copy_from_user(msg, userbuf, count);
+	if (ret) {
+		dev_err(tdev->dev, "failed to copy msg data from userspace\n");
+		return -EFAULT;
+	}
+	print_hex_dump_bytes("mailbox send: ", DUMP_PREFIX_ADDRESS,
+			     msg, MBOX_MAX_MSG_LEN);
+
 	spin_lock_irqsave(&chan->lock, flags);
-	if (unlikely(!chan->channel)) {
+	if (unlikely(IS_ERR_OR_NULL(chan->channel))) {
 		dev_err(tdev->dev, "write: mailbox closed: %u\n", chan->index);
 		ret = -ENODEV;
 		goto out;
 	}
 
-	// file read-only mode should not call this func
-	BUG_ON(chan->incoming);
-
-	if (count > MBOX_MAX_MSG_LEN) {
-		dev_err(tdev->dev, "message too long: %zd > %d\n", count,
-			MBOX_MAX_MSG_LEN);
-		ret = -EINVAL;
-		goto out;
-	}
-
-	ret = copy_from_user(chan->message, userbuf, count);
-	if (ret) {
-		dev_err(tdev->dev, "failed to copy msg data from userspace\n");
-		ret = -EFAULT;
-		goto out;
-	}
-
-	print_hex_dump_bytes("mailbox send: ", DUMP_PREFIX_ADDRESS,
-			     chan->message, MBOX_MAX_MSG_LEN);
-
 	chan->send_ack = false;
 	chan->send_rc = 0;
 
-	ret = mbox_send_message(chan->channel, chan->message);
+	// Note: successful return here does not indicate successful receipt of
+	//       sent message by the other end
+	ret = mbox_send_message(chan->channel, msg);
 	if (ret < 0) {
 		dev_err(tdev->dev, "Failed to send message via mailbox\n");
 		ret = -EIO;
-		goto out;
+	} else {
+		ret = count;
 	}
 
-	// Note: successful return here does not indicate successful receipt of
-	//       sent message by the other end
-	ret = count;
 out:
 	spin_unlock_irqrestore(&chan->lock, flags);
 	return ret;
@@ -278,45 +268,39 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 	unsigned long flags;
 	ssize_t ret;
 
-	spin_lock_irqsave(&chan->lock, flags);
-	if (unlikely(!chan->channel)) {
-		dev_err(chan->tdev->dev, "read: mailbox closed: %u\n",
-			chan->index);
-		ret = -ENODEV;
-		goto out;
-	}
-
-	if (chan->incoming) {
-		if (!chan->rx_msg_pending) {
-			ret = -EAGAIN;
-			goto out;
-		}
-
+	// This can race with channel state if user is behaving badly, but it
+	// won't be catastrophic - we still synchronize chan state changes
+	// At worst, we unnecessarily copy to userspace but still return an
+	// error, so userspace only knowingly reads the data once
+	if (chan->incoming && chan->rx_msg_pending)
 		ret = simple_read_from_buffer(userbuf, count, ppos,
 					      chan->message, MBOX_MAX_MSG_LEN);
-		chan->rx_msg_pending = false;
-
-		// Tell the controller to issue the ACK, since userspace has
-		// taken the message from the kernel, so the remote sender may send
-		// the next message, with the guarantee that we have an empty buffer
-		// to accept it (since we have a buffer of size 1 message only).
-		hpsc_mbox_rx_ack(chan, 0);
-	} else { // outgoing, return the ACK
-		if (!chan->send_ack) {
-			ret = -EAGAIN;
-			goto out;
-		}
-
+	else if (!chan->incoming && chan->send_ack)
+		// outgoing, return the ACK
 		ret = simple_read_from_buffer(userbuf, count, ppos,
 					      &chan->send_rc,
 					      sizeof(chan->send_rc));
+	else
+		ret = -EAGAIN;
 
-		// If we clear here, then userspace can only fetch [N]ACK once
-		chan->send_ack = false;
-		chan->send_rc = 0;
+	if (ret >= 0) {
+		spin_lock_irqsave(&chan->lock, flags);
+		if (unlikely(IS_ERR_OR_NULL(chan->channel))) {
+			dev_err(chan->tdev->dev, "read: mailbox closed: %u\n",
+				chan->index);
+			ret = -ENODEV;
+		} else if (chan->incoming) {
+			chan->rx_msg_pending = false;
+			// Tell the controller to issue the ACK since userspace
+			// has taken the message from the kernel buffer, so the
+			// remote sender may send the next message
+			hpsc_mbox_rx_ack(chan, 0);
+		} else {
+			chan->send_ack = false;
+			chan->send_rc = 0;
+		}
+		spin_unlock_irqrestore(&chan->lock, flags);
 	}
-out:
-	spin_unlock_irqrestore(&chan->lock, flags);
 	return ret;
 }
 
@@ -324,32 +308,32 @@ static unsigned int mbox_poll(struct file *filp, poll_table *wait)
 {
 	struct mbox_chan_dev *chan = filp->private_data;
 	unsigned long flags;
-        unsigned int rc = 0;
+	unsigned int rc = 0;
 
-        dev_dbg(chan->tdev->dev, "poll\n");
-        poll_wait(filp, &chan->wq, wait);
+	dev_dbg(chan->tdev->dev, "poll\n");
+	poll_wait(filp, &chan->wq, wait);
 
 	spin_lock_irqsave(&chan->lock, flags);
-	if (unlikely(!chan->channel)) {
+	if (unlikely(IS_ERR_OR_NULL(chan->channel))) {
 		dev_err(chan->tdev->dev, "poll: mailbox closed: %u\n",
 			chan->index);
 		goto out;
 	}
-        if (chan->rx_msg_pending || chan->send_ack)
-                rc |= POLLIN | POLLRDNORM;
-        if (!chan->send_ack)
-                rc |= POLLOUT | POLLWRNORM;
+	if (chan->rx_msg_pending || chan->send_ack)
+		rc |= POLLIN | POLLRDNORM;
+	if (!chan->send_ack)
+		rc |= POLLOUT | POLLWRNORM;
 out:
 	spin_unlock_irqrestore(&chan->lock, flags);
-        dev_dbg(chan->tdev->dev, "poll ret: %d\n", rc);
-        return rc;
+	dev_dbg(chan->tdev->dev, "poll ret: %d\n", rc);
+	return rc;
 }
 
 static const struct file_operations mbox_fops = {
 	.owner		= THIS_MODULE,
 	.write		= mbox_write,
 	.read		= mbox_read,
-	.poll           = mbox_poll,
+	.poll		= mbox_poll,
 	.open		= mbox_open,
 	.release	= mbox_release,
 };
