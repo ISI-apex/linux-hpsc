@@ -23,6 +23,14 @@
 #define MASTER_ID_SRIO0_DMA 0x878
 #define MASTER_ID_SRIO1_DMA 0x879
 
+#define GIC_SPI 0
+#define GIC_PPI 1
+#define GIC_EDGE_RISE 1
+#define GIC_EDGE_FALL 2
+#define GIC_EDGE_BOTH 3
+#define GIC_LVL_HI 4
+#define GIC_LVL_LO 8
+
 / {
 	model = "HPSC";
 	compatible = "xlnx,zynqmp";
@@ -202,14 +210,14 @@
 	pmu {
 		compatible = "arm,armv8-pmuv3";
 		interrupt-parent = <&gic>;
-		interrupts = <0 143 4>,
-			     <0 144 4>,
-			     <0 145 4>,
-			     <0 146 4>,
-			     <0 147 4>,
-			     <0 148 4>,
-			     <0 149 4>,
-			     <0 150 4>;
+		interrupts = <GIC_SPI 143 GIC_LVL_HI>,
+			     <GIC_SPI 144 GIC_LVL_HI>,
+			     <GIC_SPI 145 GIC_LVL_HI>,
+			     <GIC_SPI 146 GIC_LVL_HI>,
+			     <GIC_SPI 147 GIC_LVL_HI>,
+			     <GIC_SPI 148 GIC_LVL_HI>,
+			     <GIC_SPI 149 GIC_LVL_HI>,
+			     <GIC_SPI 150 GIC_LVL_HI>;
 		interrupt-affinity = <&cpul0>, <&cpul1>, <&cpul2>,
 				     <&cpul3>, <&cpub0>, <&cpub1>,
 				     <&cpub2>, <&cpub3>;
@@ -224,16 +232,16 @@
 		compatible = "xlnx,zynqmp-pm";
 		method = "smc";
 		interrupt-parent = <&gic>;
-		interrupts = <0 35 4>;
+		interrupts = <GIC_SPI 35 GIC_LVL_HI>;
 	};
 
 	timer {
 		compatible = "arm,armv8-timer";
 		interrupt-parent = <&gic>;
-		interrupts = <1 13 0xf08>,
-			     <1 14 0xf08>,
-			     <1 11 0xf08>,
-			     <1 10 0xf08>;
+		interrupts = <GIC_PPI 13 GIC_LVL_LO>,
+			     <GIC_PPI 14 GIC_LVL_LO>,
+			     <GIC_PPI 11 GIC_LVL_LO>,
+			     <GIC_PPI 10 GIC_LVL_LO>;
 	};
 
 	edac {
@@ -257,7 +265,7 @@
 			reg = <0x0 0xf9000000 0x20000>,
 			      <0x0 0xf9100000 0x100000>;
 			interrupt-controller;
-			interrupts = <1 9 0xf04>;
+			interrupts = <GIC_PPI 9 GIC_LVL_HI>;
 		};
 	};
 
@@ -271,7 +279,7 @@
 			compatible = "cdns,zynqmp-gem";
 			status = "okay";
 			interrupt-parent = <&gic>;
-			interrupts = <0 57 4>, <0 58 4>;
+			interrupts = <GIC_SPI 57 GIC_LVL_HI>, <GIC_SPI 58 GIC_LVL_HI>;
 			reg = <0x0 0xe5300000 0x0 0x1000>;
 			clocks = <&clk125>, <&clk125>, <&clk125>;
 			clock-names = "pclk", "hclk", "tx_clk";
@@ -302,11 +310,11 @@
 			msi-controller;
 			device_type = "pci";
 			interrupt-parent = <&gic>;
-			interrupts = <0 118 4>,
-				     <0 117 4>,
-				     <0 116 4>,
-				     <0 115 4>,	/* MSI_1 [63...32] */
-				     <0 114 4>;	/* MSI_0 [31...0] */
+			interrupts = <GIC_SPI 118 GIC_LVL_HI>,
+				     <GIC_SPI 117 GIC_LVL_HI>,
+				     <GIC_SPI 116 GIC_LVL_HI>,
+				     <GIC_SPI 115 GIC_LVL_HI>,	/* MSI_1 [63...32] */
+				     <GIC_SPI 114 GIC_LVL_HI>;	/* MSI_0 [31...0] */
 			interrupt-names = "misc","dummy","intx", "msi1", "msi0";
 			msi-parent = <&pcie>;
 			reg = <0x0 0xe5330000 0x0 0x1000>,
@@ -335,19 +343,23 @@
 			#iommu-cells = <1>;
 			#global-interrupts = <1>;
 			interrupt-parent = <&gic>;
-			interrupts = <0 152 4>, /* global irq */
+			interrupts = <GIC_SPI 152 GIC_LVL_HI>, /* global irq */
                                 /* context IRQs */
-                                <0 153 4>, <0 154 4>, <0 155 4>, <0 156 4>,
-                                <0 157 4>, <0 158 4>, <0 159 4>, <0 160 4>,
-                                <0 161 4>, <0 162 4>, <0 163 4>, <0 164 4>,
-                                <0 165 4>, <0 166 4>, <0 167 4>, <0 168 4>;
+                                <GIC_SPI 153 GIC_LVL_HI>, <GIC_SPI 154 GIC_LVL_HI>,
+                                <GIC_SPI 155 GIC_LVL_HI>, <GIC_SPI 156 GIC_LVL_HI>,
+                                <GIC_SPI 157 GIC_LVL_HI>, <GIC_SPI 158 GIC_LVL_HI>,
+                                <GIC_SPI 159 GIC_LVL_HI>, <GIC_SPI 160 GIC_LVL_HI>,
+                                <GIC_SPI 161 GIC_LVL_HI>, <GIC_SPI 162 GIC_LVL_HI>,
+                                <GIC_SPI 163 GIC_LVL_HI>, <GIC_SPI 164 GIC_LVL_HI>,
+                                <GIC_SPI 165 GIC_LVL_HI>, <GIC_SPI 166 GIC_LVL_HI>,
+                                <GIC_SPI 167 GIC_LVL_HI>, <GIC_SPI 168 GIC_LVL_HI>;
 		};
 
 		uart0: serial@f92c0000 {
 			compatible = "cdns,uart-r1p12", "xlnx,xuartps";
 			status = "okay";
 			interrupt-parent = <&gic>;
-			interrupts = <0 23 4>;
+			interrupts = <GIC_SPI 23 GIC_LVL_HI>;
 			reg = <0x0 0xf92c0000 0x0 0x1000>;
 			clocks = <&clk100 &clk100>;
 			clock-names = "uart_clk", "pclk";
@@ -365,10 +377,14 @@
 			 * actual within-ip-block index of the interrupt (and
 			 * if we do, we'd still need an extra property to define
 			 * the starting irq number, which is worse. */
-                        interrupts = <0 136 4>, <0 137 4>, <0 138 4>, <0 139 4>,
-                                     <0 140 4>, <0 141 4>, <0 142 4>, <0 143 4>,
-                                     <0 144 4>, <0 145 4>, <0 146 4>, <0 147 4>,
-                                     <0 148 4>, <0 149 4>, <0 150 4>, <0 151 4>;
+                        interrupts = <GIC_SPI 136 GIC_LVL_HI>, <GIC_SPI 137 GIC_LVL_HI>,
+                                     <GIC_SPI 138 GIC_LVL_HI>, <GIC_SPI 139 GIC_LVL_HI>,
+                                     <GIC_SPI 140 GIC_LVL_HI>, <GIC_SPI 141 GIC_LVL_HI>,
+                                     <GIC_SPI 142 GIC_LVL_HI>, <GIC_SPI 143 GIC_LVL_HI>,
+                                     <GIC_SPI 144 GIC_LVL_HI>, <GIC_SPI 145 GIC_LVL_HI>,
+                                     <GIC_SPI 146 GIC_LVL_HI>, <GIC_SPI 147 GIC_LVL_HI>,
+                                     <GIC_SPI 148 GIC_LVL_HI>, <GIC_SPI 149 GIC_LVL_HI>,
+                                     <GIC_SPI 150 GIC_LVL_HI>, <GIC_SPI 151 GIC_LVL_HI>;
 
 			/* Map all instances onto one pair of IRQs,
 			 * this pair must be not be used by other subsystems */
@@ -389,15 +405,19 @@
                         reg = <0x0 0xfff60000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 
-                        interrupts = <0 203 4>, <0 204 4>, <0 205 4>, <0 206 4>,
-                                     <0 207 4>, <0 208 4>, <0 209 4>, <0 210 4>,
-                                     <0 211 4>, <0 212 4>, <0 213 4>, <0 214 4>,
-                                     <0 215 4>, <0 216 4>, <0 217 4>, <0 218 4>;
+                        interrupts = <GIC_SPI 203 GIC_LVL_HI>, <GIC_SPI 204 GIC_LVL_HI>,
+                                     <GIC_SPI 205 GIC_LVL_HI>, <GIC_SPI 206 GIC_LVL_HI>,
+                                     <GIC_SPI 207 GIC_LVL_HI>, <GIC_SPI 208 GIC_LVL_HI>,
+                                     <GIC_SPI 209 GIC_LVL_HI>, <GIC_SPI 210 GIC_LVL_HI>,
+                                     <GIC_SPI 211 GIC_LVL_HI>, <GIC_SPI 212 GIC_LVL_HI>,
+                                     <GIC_SPI 213 GIC_LVL_HI>, <GIC_SPI 214 GIC_LVL_HI>,
+                                     <GIC_SPI 215 GIC_LVL_HI>, <GIC_SPI 216 GIC_LVL_HI>,
+                                     <GIC_SPI 217 GIC_LVL_HI>, <GIC_SPI 218 GIC_LVL_HI>;
 
 			interrupt-idx-rcv = <MBOX_HPPS_RTPS__HPPS_RCV_INT>;
 			interrupt-idx-ack = <MBOX_HPPS_RTPS__HPPS_ACK_INT>;
 
-			#mbox-cells = <4>;
+			#mbox-cells = <GIC_LVL_HI>;
 		};
 
 		mailbox_client_trch {
@@ -538,7 +558,7 @@
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0xf92e0000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
-			interrupts = <0 63 4>, <0 64 4>;
+			interrupts = <GIC_SPI 63 GIC_LVL_HI>, <GIC_SPI 64 GIC_LVL_HI>;
 			iommus = <&smmu MASTER_ID_HPPS_DMA>;
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
@@ -549,7 +569,7 @@
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0xe5310000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
-			interrupts = <0 65 4>, <0 66 4>;
+			interrupts = <GIC_SPI 65 GIC_LVL_HI>, <GIC_SPI 66 GIC_LVL_HI>;
 			iommus = <&smmu MASTER_ID_SRIO0_DMA>;
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
@@ -560,7 +580,7 @@
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0xe5330000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
-			interrupts = <0 67 4>, <0 68 4>;
+			interrupts = <GIC_SPI 67 GIC_LVL_HI>, <GIC_SPI 68 GIC_LVL_HI>;
 			iommus = <&smmu MASTER_ID_SRIO1_DMA>;
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
@@ -574,7 +594,7 @@
 			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
 			compatible = "arm,pl353-smc-r2p1";
 			interrupt-parent = <&gic>;
-			interrupts = <0 14 4>;
+			interrupts = <GIC_SPI 14 GIC_LVL_HI>;
 			ranges ;
 			reg = <0x0 0xf92d0000 0x0 0x1000>;
 			nand0: nand0@600000000 {
