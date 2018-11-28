@@ -23,7 +23,7 @@
 
 struct mbox_chan_dev {
 	struct mbox_client_dev	*tdev;
-	struct mbox_client	client;
+	struct mbox_client	cl;
 	struct mbox_chan	*channel;
 	atomic_t		send_ready;
 };
@@ -37,8 +37,7 @@ struct mbox_client_dev {
 
 static void client_rx_callback(struct mbox_client *cl, void *msg)
 {
-	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev,
-						  client);
+	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev, cl);
 	int ret;
 	dev_info(cl->dev, "rx_callback\n");
 	// handle message synchronously
@@ -50,8 +49,7 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 static void client_tx_done(struct mbox_client *cl, void *msg, int r)
 {
 	// received a [N]ACK from previous message
-	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev,
-						  client);
+	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev, cl);
 	atomic_set(&cdev->send_ready, true);
 	if (r)
 		dev_warn(cl->dev, "tx_done: got NACK: %d\n", r);
@@ -95,7 +93,7 @@ static int hpsc_mbox_verify_chan_cfg(struct mbox_client_dev *tdev)
 	return 0;
 }
 
-static void hpsc_mbox_kernel_init(struct mbox_client *cl, struct device *dev,
+static void hpsc_mbox_client_init(struct mbox_client *cl, struct device *dev,
 				  bool incoming)
 {
 	cl->dev = dev;
@@ -107,18 +105,13 @@ static void hpsc_mbox_kernel_init(struct mbox_client *cl, struct device *dev,
 	cl->knows_txdone = false;
 }
 
-static void hpsc_mbox_chan_dev_init(struct mbox_chan_dev *cdev,
-				    struct mbox_client_dev *tdev, bool incoming)
+static int hpsc_mbox_chan_open(struct mbox_client_dev *tdev, int i)
 {
+	struct mbox_chan_dev *cdev = &tdev->chans[i];
 	cdev->tdev = tdev;
-	hpsc_mbox_kernel_init(&cdev->client, tdev->dev, incoming);
-	cdev->channel = NULL;
+	hpsc_mbox_client_init(&cdev->cl, tdev->dev, (bool) i);
 	atomic_set(&cdev->send_ready, true);
-}
-
-static int hpsc_mbox_kernel_request_chan(struct mbox_chan_dev *cdev, int i)
-{
-	cdev->channel = mbox_request_channel(&cdev->client, i);
+	cdev->channel = mbox_request_channel(&cdev->cl, i);
 	if (IS_ERR(cdev->channel)) {
 		dev_err(cdev->tdev->dev, "Channel request failed: %d\n", i);
 		return PTR_ERR(cdev->channel);
@@ -129,44 +122,34 @@ static int hpsc_mbox_kernel_request_chan(struct mbox_chan_dev *cdev, int i)
 static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev;
-	int i;
 	int ret;
-
 	dev_info(&pdev->dev, "probe\n");
 
-	// create/init client device
 	tdev = devm_kzalloc(&pdev->dev, sizeof(*tdev), GFP_KERNEL);
 	if (!tdev)
 		return -ENOMEM;
 	tdev->dev = &pdev->dev;
 	platform_set_drvdata(pdev, tdev);
 
-	// verify channel configuration in device tree, init chan array
+	tdev->nb.notifier_call = hpsc_mbox_kernel_send;
+	tdev->nb.priority = HPSC_NOTIF_PRIORITY_MAILBOX;
+
+	// verify channel configuration in device tree
 	ret = hpsc_mbox_verify_chan_cfg(tdev);
 	if (ret)
 		return ret;
-	for (i = 0; i < DT_MBOXES_COUNT; i++)
-		hpsc_mbox_chan_dev_init(&tdev->chans[i], tdev, i);
 
-	// Can't use spin_lock_irqsave around mbox_request_channel since the
-	// latter uses a mutex and might sleep.
-	// So, we open the outbound channel first, register with notif handler,
-	// then finally open the inbound channel. Inbound may quickly receive
-	// a rx interrupt, but that's OK because outbound is registered and
-	// ready to send any synchronous response.
-	ret = hpsc_mbox_kernel_request_chan(&tdev->chans[DT_MBOX_OUT],
-					    DT_MBOX_OUT);
+	// Must open the outbound chan and register with notif handler before
+	// opening the inbound chan, which may receive a rx interrupt on open
+	// that results in a synchronous reply (outbound message).
+	ret = hpsc_mbox_chan_open(tdev, DT_MBOX_OUT);
 	if (ret)
 		return ret;
-	tdev->nb.notifier_call = hpsc_mbox_kernel_send;
-	tdev->nb.priority = HPSC_NOTIF_PRIORITY_MAILBOX;
-	ret = hpsc_notif_register(&tdev->nb);
-	BUG_ON(ret); // we should be the only mailbox handler
-	ret = hpsc_mbox_kernel_request_chan(&tdev->chans[DT_MBOX_IN],
-					    DT_MBOX_IN);
+	hpsc_notif_register(&tdev->nb);
+	ret = hpsc_mbox_chan_open(tdev, DT_MBOX_IN);
 	if (ret) {
-		mbox_free_channel(tdev->chans[DT_MBOX_OUT].channel);
 		hpsc_notif_unregister(&tdev->nb);
+		mbox_free_channel(tdev->chans[DT_MBOX_OUT].channel);
 		return ret;
 	}
 
@@ -175,15 +158,12 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 
 static int hpsc_mbox_kernel_remove(struct platform_device *pdev)
 {
-	int i;
 	struct mbox_client_dev *tdev = platform_get_drvdata(pdev);
+	int i;
 	dev_info(&pdev->dev, "remove\n");
-	// unregister with notification handler
 	hpsc_notif_unregister(&tdev->nb);
-	// close channels
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
 		mbox_free_channel(tdev->chans[i].channel);
-	// mbox_client_dev instance managed for us
 	return 0;
 }
 
