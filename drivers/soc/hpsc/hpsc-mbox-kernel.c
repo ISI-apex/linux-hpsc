@@ -24,10 +24,8 @@
 struct mbox_chan_dev {
 	struct mbox_client_dev	*tdev;
 	struct mbox_client	client;
-	spinlock_t		lock;
 	struct mbox_chan	*channel;
-	// set when controller notifies us from its ACK ISR
-	bool			send_ack;
+	atomic_t		send_ready;
 };
 
 struct mbox_client_dev {
@@ -41,15 +39,12 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 {
 	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev,
 						  client);
-	unsigned long flags;
 	int ret;
 	dev_info(cl->dev, "rx_callback\n");
-	spin_lock_irqsave(&cdev->lock, flags);
 	// handle message synchronously
 	ret = hpsc_notif_recv(msg, HPSC_MBOX_MSG_LEN);
 	// tell the controller to issue the ACK (NULL if !ret) or NACK
 	mbox_send_message(cdev->channel, ERR_PTR(ret));
-	spin_unlock_irqrestore(&cdev->lock, flags);
 }
 
 static void client_tx_done(struct mbox_client *cl, void *msg, int r)
@@ -57,10 +52,7 @@ static void client_tx_done(struct mbox_client *cl, void *msg, int r)
 	// received a [N]ACK from previous message
 	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev,
 						  client);
-	unsigned long flags;
-	spin_lock_irqsave(&cdev->lock, flags);
-	cdev->send_ack = true;
-	spin_unlock_irqrestore(&cdev->lock, flags);
+	atomic_set(&cdev->send_ready, true);
 	if (r)
 		dev_warn(cl->dev, "tx_done: got NACK: %d\n", r);
 	else
@@ -74,27 +66,19 @@ static int hpsc_mbox_kernel_send(struct notifier_block *nb,
 	struct mbox_client_dev *tdev = container_of(nb, struct mbox_client_dev,
 						    nb);
 	struct mbox_chan_dev *cdev = &tdev->chans[DT_MBOX_OUT];
-	unsigned long flags;
 	int ret;
 	dev_info(tdev->dev, "send\n");
-	spin_lock_irqsave(&cdev->lock, flags);
-	if (!cdev->send_ack) {
-		// previous message not yet ack'd
-		ret = NOTIFY_STOP_MASK | EAGAIN;
-		goto send_out;
-	}
+	if (!atomic_cmpxchg(&cdev->send_ready, true, false))
+		// previous message not yet [N]ACK'd
+		return NOTIFY_STOP_MASK | EAGAIN;
 	ret = mbox_send_message(cdev->channel, msg);
-	if (ret >= 0) {
-		cdev->send_ack = false;
-		ret = NOTIFY_STOP;
-	} else {
+	if (ret < 0) {
 		dev_err(tdev->dev, "Failed to send mailbox message: %d\n", ret);
+		atomic_set(&cdev->send_ready, true);
 		// need the positive error code value
-		ret = -ret;
+		return -ret;
 	}
-send_out:
-	spin_unlock_irqrestore(&cdev->lock, flags);
-	return ret;
+	return NOTIFY_STOP;
 }
 
 static int hpsc_mbox_verify_chan_cfg(struct mbox_client_dev *tdev)
@@ -128,9 +112,8 @@ static void hpsc_mbox_chan_dev_init(struct mbox_chan_dev *cdev,
 {
 	cdev->tdev = tdev;
 	hpsc_mbox_kernel_init(&cdev->client, tdev->dev, incoming);
-	spin_lock_init(&cdev->lock);
 	cdev->channel = NULL;
-	cdev->send_ack = true;
+	atomic_set(&cdev->send_ready, true);
 }
 
 static int hpsc_mbox_kernel_request_chan(struct mbox_chan_dev *cdev, int i)
