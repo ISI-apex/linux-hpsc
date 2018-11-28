@@ -47,13 +47,13 @@ EXPORT_SYMBOL_GPL(hpsc_msg_lifecycle);
  * The remainder of this file is for processing received messages.
  */
 
-static int msg_cb_nop(const unsigned char *msg)
+static int msg_cb_nop(const u8 *msg)
 {
 	pr_info("hpsc-msg: received NOP\n");
 	return 0;
 }
 
-static int msg_cb_ping(const unsigned char *msg)
+static int msg_cb_ping(const u8 *msg)
 {
 	HPSC_MSG_DEFINE(res);
 	pr_info("hpsc-msg: received PING, replying with PONG\n");
@@ -64,31 +64,25 @@ static int msg_cb_ping(const unsigned char *msg)
 	return 0;
 }
 
-static int msg_cb_pong(const unsigned char *msg)
+static int msg_cb_pong(const u8 *msg)
 {
 	pr_info("hpsc-msg: received PONG\n");
 	return 0;
 }
 
-static int msg_cb_drop(const unsigned char *msg)
+static int msg_cb_drop(const u8 *msg)
 {
-	pr_warn("hpsc-msg: Unsupported/unimplemented type: %d\n", (int) msg[0]);
-	print_hex_dump_bytes("hpsc-msg", DUMP_PREFIX_ADDRESS, msg,
-			     HPSC_MSG_SIZE);
+	pr_warn("hpsc-msg: Unsupported/unimplemented type: %x\n", msg[0]);
 	return 0;
 }
 
 /**
  * Callback functions for message types.
  *
- * @param t Message type
  * @param msg Message pointer
- * @param sz Message size
- * @param res An available response buffer
- * @return a positive value to send a response, a negative value on error,
- *         0 otherwise
+ * @return 0 on success, a negative value on error
  */
-static int (* const msg_cbs[HPSC_MSG_TYPE_COUNT])(const unsigned char *msg) = {
+static int (* const msg_cbs[HPSC_MSG_TYPE_COUNT])(const u8 *msg) = {
 	msg_cb_nop,		// NOP
 	msg_cb_ping,		// PING
 	msg_cb_pong,		// PONG
@@ -109,11 +103,11 @@ static int (* const msg_cbs[HPSC_MSG_TYPE_COUNT])(const unsigned char *msg) = {
 int hpsc_msg_process(const void *msg, size_t sz)
 {
 	// first 4 bytes are reserved (byte 0 is the message type)
-	int t = ((const unsigned char*) msg)[0];
+	u8 t = ((const u8*) msg)[0];
 	BUG_ON(sz != HPSC_MSG_SIZE);
-	if (t < 0 || t >= HPSC_MSG_TYPE_COUNT) {
-		// unknown/invalid message type
-		pr_err("hpsc-msg: invalid message type: %d\n", t);
+	print_hex_dump_bytes("hpsc_msg_process", DUMP_PREFIX_ADDRESS, msg, sz);
+	if (t >= HPSC_MSG_TYPE_COUNT) {
+		pr_err("hpsc-msg: invalid message type: %x\n", t);
 		return -EINVAL;
 	}
 	return msg_cbs[t](msg);
