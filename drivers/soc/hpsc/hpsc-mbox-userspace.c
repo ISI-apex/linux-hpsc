@@ -57,9 +57,9 @@ struct mbox_chan_dev {
 	/* dynamic fields */
 
 	// mbox structs
-	struct mbox_client	client;
+	struct mbox_client	cl;
 	struct mbox_chan	*channel;
-	// rx/tx buffer
+	// rx buffer
 	u32			message[HPSC_MBOX_DATA_REGS];
 	// direction
 	bool			incoming;
@@ -71,8 +71,7 @@ struct mbox_chan_dev {
 	int			send_rc;
 };
 
-// May be multiple mailbox instances
-// Therefore, manage class at module init/exit, not device probe/remove
+// To support multiple mbox instances, manage class at module init/exit
 static struct class *class;
 static DEFINE_IDA(mbox_ida);
 
@@ -82,10 +81,9 @@ static int hpsc_mbox_rx_ack(struct mbox_chan_dev *chan, int err)
 	return mbox_send_message(chan->channel, err ? ERR_PTR(err) : NULL);
 }
 
-static void mbox_received(struct mbox_client *client, void *message)
+static void mbox_received(struct mbox_client *cl, void *message)
 {
-	struct mbox_chan_dev *chan = container_of(client, struct mbox_chan_dev,
-						  client);
+	struct mbox_chan_dev *chan = container_of(cl, struct mbox_chan_dev, cl);
 	unsigned long flags;
 
 	print_hex_dump_bytes("mailbox rcved", DUMP_PREFIX_ADDRESS, message,
@@ -112,17 +110,15 @@ static void mbox_received(struct mbox_client *client, void *message)
 	spin_unlock_irqrestore(&chan->lock, flags);
 }
 
-static void mbox_sent(struct mbox_client *client, void *message, int r)
+static void mbox_sent(struct mbox_client *cl, void *message, int r)
 {
-	struct mbox_chan_dev *chan = container_of(client, struct mbox_chan_dev,
-						  client);
+	struct mbox_chan_dev *chan = container_of(cl, struct mbox_chan_dev, cl);
 	unsigned long flags;
 
 	if (r)
-		dev_warn(client->dev, "sent: got NACK: %u: %d\n",
-			 chan->index, r);
+		dev_warn(cl->dev, "sent: got NACK: %u: %d\n", chan->index, r);
 	else
-		dev_info(client->dev, "sent: got ACK: %u\n", chan->index);
+		dev_info(cl->dev, "sent: got ACK: %u\n", chan->index);
 
 	spin_lock_irqsave(&chan->lock, flags);
 	if (unlikely(IS_ERR_OR_NULL(chan->channel))) {
@@ -176,7 +172,7 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	chan->rx_msg_pending = false;
 	chan->send_rc = 0;
 	chan->send_ack = false;
-	mbox_client_init(&chan->client, tdev->dev, chan->incoming);
+	mbox_client_init(&chan->cl, tdev->dev, chan->incoming);
 	// non-NULL to prevent race with above if statement before channel open
 	chan->channel = ERR_PTR(-ENODEV);
 	// release lock before requesting channel since mbox_request_channel
@@ -184,7 +180,7 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 	spin_unlock_irqrestore(&chan->lock, flags);
 
 	// open mailbox channel
-	chan->channel = mbox_request_channel(&chan->client, chan->index);
+	chan->channel = mbox_request_channel(&chan->cl, chan->index);
 	if (IS_ERR(chan->channel)) {
 		dev_err(tdev->dev, "request for mbox channel failed: %u\n",
 			chan->index);
@@ -397,7 +393,6 @@ static int mbox_create_dev_files(struct mbox_client_dev *tdev)
 				rc = -EFAULT;
 				goto fail_dev;
 			}
-
 		} else { // index with a prefix
 			rc = snprintf(devf_name, sizeof(devf_name), "mbox%u", i);
 			if (rc < 0) {
@@ -409,12 +404,9 @@ static int mbox_create_dev_files(struct mbox_client_dev *tdev)
 			}
 			fname = devf_name;
 		}
-
 		rc = mbox_chan_dev_init(&tdev->chans[i], tdev, i, fname);
-		if (rc) {
-			dev_err(tdev->dev, "failed to construct mailbox device\n");
+		if (rc)
 			goto fail_dev;
-		}
 	}
 
 	return 0;
@@ -424,12 +416,16 @@ fail_dev:
 	return rc;
 }
 
-static int mbox_client_dev_init(struct mbox_client_dev *tdev,
-				struct platform_device *pdev)
+static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
 {
+	struct mbox_client_dev *tdev;
 	dev_t dev;
 	int ret;
+	dev_info(&pdev->dev, "probe\n");
 
+	tdev = devm_kzalloc(&pdev->dev, sizeof(*tdev), GFP_KERNEL);
+	if (!tdev)
+		return -ENOMEM;
 	tdev->dev = &pdev->dev;
 	platform_set_drvdata(pdev, tdev);
 
@@ -454,48 +450,26 @@ static int mbox_client_dev_init(struct mbox_client_dev *tdev,
 	tdev->major_num = MAJOR(dev);
 
 	tdev->id = ida_simple_get(&mbox_ida, 0, 0, GFP_KERNEL);
+
 	ret = mbox_create_dev_files(tdev);
 	if (ret) {
 		ida_simple_remove(&mbox_ida, tdev->id);
 		unregister_chrdev_region(MKDEV(tdev->major_num, 0),
 					 tdev->num_chans);
-		return ret;
 	}
 
-	return 0;
-}
-
-static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
-{
-	struct mbox_client_dev *tdev;
-	int ret;
-
-	dev_info(&pdev->dev, "probe\n");
-
-	tdev = devm_kzalloc(&pdev->dev, sizeof(*tdev), GFP_KERNEL);
-	if (!tdev)
-		return -ENOMEM;
-
-	ret = mbox_client_dev_init(tdev, pdev);
-	if (ret)
-		return ret;
-
-	return 0;
+	return ret;
 }
 
 static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev = platform_get_drvdata(pdev);
 	int i;
-
 	dev_info(&pdev->dev, "remove\n");
-
 	for (i = tdev->num_chans - 1; i >= 0; --i)
 		mbox_chan_dev_destroy(&tdev->chans[i]);
-
 	ida_simple_remove(&mbox_ida, tdev->id);
 	unregister_chrdev_region(MKDEV(tdev->major_num, 0), tdev->num_chans);
-
 	return 0;
 }
 
