@@ -16,31 +16,28 @@
 #define DT_MBOXES_PROP	"mboxes"
 #define DT_MBOX_OUT	0
 #define DT_MBOX_IN	1
-#define DT_MBOXES_COUNT	2
+#define DT_MBOX_COUNT	2
 #define DT_MBOXES_CELLS	"#mbox-cells"
 
 #define HPSC_MBOX_MSG_LEN 64
 
 struct mbox_chan_dev {
-	struct mbox_client_dev	*tdev;
 	struct mbox_client	cl;
 	struct mbox_chan	*channel;
 	atomic_t		send_ready;
 };
 
 struct mbox_client_dev {
-	struct mbox_chan_dev	chans[DT_MBOXES_COUNT];
+	struct mbox_chan_dev	chans[DT_MBOX_COUNT];
 	struct notifier_block	nb;
 	struct device		*dev;
 };
-
 
 static void client_rx_callback(struct mbox_client *cl, void *msg)
 {
 	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev, cl);
 	int ret;
 	dev_info(cl->dev, "rx_callback\n");
-	// handle message synchronously
 	ret = hpsc_notif_recv(msg, HPSC_MBOX_MSG_LEN);
 	// tell the controller to issue the ACK (NULL if !ret) or NACK
 	mbox_send_message(cdev->channel, ERR_PTR(ret));
@@ -48,19 +45,14 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 
 static void client_tx_done(struct mbox_client *cl, void *msg, int r)
 {
-	// received a [N]ACK from previous message
 	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev, cl);
+	dev_info(cl->dev, "tx_done: got %sACK: %d\n", r ? "N" : "", r);
 	atomic_set(&cdev->send_ready, true);
-	if (r)
-		dev_warn(cl->dev, "tx_done: got NACK: %d\n", r);
-	else
-		dev_info(cl->dev, "tx_done: got ACK\n");
 }
 
 static int hpsc_mbox_kernel_send(struct notifier_block *nb,
 				 unsigned long action, void *msg)
 {
-	// send message synchronously
 	struct mbox_client_dev *tdev = container_of(nb, struct mbox_client_dev,
 						    nb);
 	struct mbox_chan_dev *cdev = &tdev->chans[DT_MBOX_OUT];
@@ -85,9 +77,9 @@ static int hpsc_mbox_verify_chan_cfg(struct mbox_client_dev *tdev)
 	int num_chans = of_count_phandle_with_args(tdev->dev->of_node,
 						   DT_MBOXES_PROP,
 						   DT_MBOXES_CELLS);
-	if (num_chans != DT_MBOXES_COUNT) {
+	if (num_chans != DT_MBOX_COUNT) {
 		dev_err(tdev->dev, "Num instances in '%s' property != %d: %d\n",
-			DT_MBOXES_PROP, DT_MBOXES_COUNT, num_chans);
+			DT_MBOXES_PROP, DT_MBOX_COUNT, num_chans);
 		return -EINVAL;
 	}
 	return 0;
@@ -108,12 +100,11 @@ static void hpsc_mbox_client_init(struct mbox_client *cl, struct device *dev,
 static int hpsc_mbox_chan_open(struct mbox_client_dev *tdev, int i)
 {
 	struct mbox_chan_dev *cdev = &tdev->chans[i];
-	cdev->tdev = tdev;
 	hpsc_mbox_client_init(&cdev->cl, tdev->dev, (bool) i);
 	atomic_set(&cdev->send_ready, true);
 	cdev->channel = mbox_request_channel(&cdev->cl, i);
 	if (IS_ERR(cdev->channel)) {
-		dev_err(cdev->tdev->dev, "Channel request failed: %d\n", i);
+		dev_err(tdev->dev, "Channel request failed: %d\n", i);
 		return PTR_ERR(cdev->channel);
 	}
 	return 0;
@@ -162,7 +153,7 @@ static int hpsc_mbox_kernel_remove(struct platform_device *pdev)
 	int i;
 	dev_info(&pdev->dev, "remove\n");
 	hpsc_notif_unregister(&tdev->nb);
-	for (i = 0; i < DT_MBOXES_COUNT; i++)
+	for (i = 0; i < DT_MBOX_COUNT; i++)
 		mbox_free_channel(tdev->chans[i].channel);
 	return 0;
 }
