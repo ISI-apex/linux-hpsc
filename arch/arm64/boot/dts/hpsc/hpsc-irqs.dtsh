@@ -1,0 +1,268 @@
+// ******** TRCH interrupt controller inputs **************
+
+#define TRCH_IRQ__WDT_TRCH_ST1                   0
+// no ST2 IRQ, because it's wired to reset in HW
+
+#define TRCH_IRQ__WDT_RTPS0_ST2                  1
+#define TRCH_IRQ__WDT_RTPS1_ST2                  2
+
+#define TRCH_IRQ__WDT_HPPS0_ST2                  3
+#define TRCH_IRQ__WDT_HPPS1_ST2                  4
+#define TRCH_IRQ__WDT_HPPS2_ST2                  5
+#define TRCH_IRQ__WDT_HPPS3_ST2                  6
+#define TRCH_IRQ__WDT_HPPS4_ST2                  7
+#define TRCH_IRQ__WDT_HPPS5_ST2                  8
+#define TRCH_IRQ__WDT_HPPS6_ST2                  9
+#define TRCH_IRQ__WDT_HPPS7_ST2                 10
+
+#define TRCH_IRQ__LSIO_UART0_0		        11
+#define TRCH_IRQ__LSIO_UART0_1                  12
+
+#define TRCH_IRQ__TR_MBOX_0                     13
+#define TRCH_IRQ__TR_MBOX_1                     14
+#define TRCH_IRQ__TR_MBOX_2                     15
+#define TRCH_IRQ__TR_MBOX_3                     16
+#define TRCH_IRQ__TR_MBOX_4                     17
+#define TRCH_IRQ__TR_MBOX_5                     18
+#define TRCH_IRQ__TR_MBOX_6                     19
+#define TRCH_IRQ__TR_MBOX_7                     20
+#define TRCH_IRQ__TR_MBOX_8                     21
+#define TRCH_IRQ__TR_MBOX_9                     22
+#define TRCH_IRQ__TR_MBOX_10                    23
+#define TRCH_IRQ__TR_MBOX_11                    24
+#define TRCH_IRQ__TR_MBOX_12                    25
+#define TRCH_IRQ__TR_MBOX_13                    26
+#define TRCH_IRQ__TR_MBOX_14                    27
+#define TRCH_IRQ__TR_MBOX_15                    28
+
+#define TRCH_IRQ__HT_MBOX_0                     29
+#define TRCH_IRQ__HT_MBOX_1                     30
+#define TRCH_IRQ__HT_MBOX_2                     31
+#define TRCH_IRQ__HT_MBOX_3                     32
+#define TRCH_IRQ__HT_MBOX_4                     33
+#define TRCH_IRQ__HT_MBOX_5                     34
+#define TRCH_IRQ__HT_MBOX_6                     35
+#define TRCH_IRQ__HT_MBOX_7                     36
+#define TRCH_IRQ__HT_MBOX_8                     37
+#define TRCH_IRQ__HT_MBOX_9                     38
+#define TRCH_IRQ__HT_MBOX_10                    39
+#define TRCH_IRQ__HT_MBOX_11                    40
+#define TRCH_IRQ__HT_MBOX_12                    41
+#define TRCH_IRQ__HT_MBOX_13                    42
+#define TRCH_IRQ__HT_MBOX_14                    43
+#define TRCH_IRQ__HT_MBOX_15                    44
+
+#define TRCH_IRQ__RT_SMMU_GLOB                  45
+#define TRCH_IRQ__RT_SMMU_CB_0                  46
+#define TRCH_IRQ__RT_SMMU_CB_1                  47
+#define TRCH_IRQ__RT_SMMU_CB_2                  48
+#define TRCH_IRQ__RT_SMMU_CB_3                  49
+#define TRCH_IRQ__RT_SMMU_CB_4                  50
+#define TRCH_IRQ__RT_SMMU_CB_5                  51
+#define TRCH_IRQ__RT_SMMU_CB_6                  52
+#define TRCH_IRQ__RT_SMMU_CB_7                  53
+#define TRCH_IRQ__RT_SMMU_CB_8                  54
+#define TRCH_IRQ__RT_SMMU_CB_9                  55
+#define TRCH_IRQ__RT_SMMU_CB_10                 56
+#define TRCH_IRQ__RT_SMMU_CB_11                 57
+#define TRCH_IRQ__RT_SMMU_CB_12                 58
+#define TRCH_IRQ__RT_SMMU_CB_13                 59
+#define TRCH_IRQ__RT_SMMU_CB_14                 60
+#define TRCH_IRQ__RT_SMMU_CB_15                 61
+
+#define TRCH_IRQ__TRCH_DMA_ABORT                62
+#define TRCH_IRQ__TRCH_DMA_EV0                  63
+#define TRCH_IRQ__TRCH_DMA_EV1                  64
+#define TRCH_IRQ__TRCH_DMA_EV2                  65
+#define TRCH_IRQ__TRCH_DMA_EV3                  66
+#define TRCH_IRQ__TRCH_DMA_EV4                  67
+#define TRCH_IRQ__TRCH_DMA_EV5                  68
+#define TRCH_IRQ__TRCH_DMA_EV6                  69
+#define TRCH_IRQ__TRCH_DMA_EV7                  70
+
+#define TRCH_IRQ__TRCH_SMC                      71
+
+
+// ******** RTPS interrupt controller inputs **************
+
+#define RTPS_IRQ__LSIO_UART1_0		         0
+#define RTPS_IRQ__LSIO_UART1_1		         1
+
+#define RTPS_IRQ__TR_MBOX_0                      2
+#define RTPS_IRQ__TR_MBOX_1                      3
+#define RTPS_IRQ__TR_MBOX_2                      4
+#define RTPS_IRQ__TR_MBOX_3                      5
+#define RTPS_IRQ__TR_MBOX_4                      6
+#define RTPS_IRQ__TR_MBOX_5                      7
+#define RTPS_IRQ__TR_MBOX_6                      8
+#define RTPS_IRQ__TR_MBOX_7                      9
+#define RTPS_IRQ__TR_MBOX_8                     10
+#define RTPS_IRQ__TR_MBOX_9                     11
+#define RTPS_IRQ__TR_MBOX_10                    12
+#define RTPS_IRQ__TR_MBOX_11                    13
+#define RTPS_IRQ__TR_MBOX_12                    14
+#define RTPS_IRQ__TR_MBOX_13                    15
+#define RTPS_IRQ__TR_MBOX_14                    16
+#define RTPS_IRQ__TR_MBOX_15                    17
+
+#define RTPS_IRQ__HR_MBOX_0                     18
+#define RTPS_IRQ__HR_MBOX_1                     19
+#define RTPS_IRQ__HR_MBOX_2                     20
+#define RTPS_IRQ__HR_MBOX_3                     21
+#define RTPS_IRQ__HR_MBOX_4                     22
+#define RTPS_IRQ__HR_MBOX_5                     23
+#define RTPS_IRQ__HR_MBOX_6                     24
+#define RTPS_IRQ__HR_MBOX_7                     25
+#define RTPS_IRQ__HR_MBOX_8                     26
+#define RTPS_IRQ__HR_MBOX_9                     27
+#define RTPS_IRQ__HR_MBOX_10                    28
+#define RTPS_IRQ__HR_MBOX_11                    29
+#define RTPS_IRQ__HR_MBOX_12                    30
+#define RTPS_IRQ__HR_MBOX_13                    31
+#define RTPS_IRQ__HR_MBOX_14                    32
+#define RTPS_IRQ__HR_MBOX_15                    33
+
+#define RTPS_IRQ__RTPS_SMMU_GLOB                34
+#define RTPS_IRQ__RTPS_SMMU_CB_0                35
+#define RTPS_IRQ__RTPS_SMMU_CB_1                36
+#define RTPS_IRQ__RTPS_SMMU_CB_2                37
+#define RTPS_IRQ__RTPS_SMMU_CB_3                38
+#define RTPS_IRQ__RTPS_SMMU_CB_4                39
+#define RTPS_IRQ__RTPS_SMMU_CB_5                40
+#define RTPS_IRQ__RTPS_SMMU_CB_6                41
+#define RTPS_IRQ__RTPS_SMMU_CB_7                42
+#define RTPS_IRQ__RTPS_SMMU_CB_8                43
+#define RTPS_IRQ__RTPS_SMMU_CB_9                44
+#define RTPS_IRQ__RTPS_SMMU_CB_10               45
+#define RTPS_IRQ__RTPS_SMMU_CB_11               46
+#define RTPS_IRQ__RTPS_SMMU_CB_12               47
+#define RTPS_IRQ__RTPS_SMMU_CB_13               48
+#define RTPS_IRQ__RTPS_SMMU_CB_14               49
+#define RTPS_IRQ__RTPS_SMMU_CB_15               50
+
+#define RTPS_IRQ__RTPS_DMA_ABORT                51
+#define RTPS_IRQ__RTPS_DMA_EV0                  52
+#define RTPS_IRQ__RTPS_DMA_EV1                  53
+#define RTPS_IRQ__RTPS_DMA_EV2                  54
+#define RTPS_IRQ__RTPS_DMA_EV3                  55
+#define RTPS_IRQ__RTPS_DMA_EV4                  56
+#define RTPS_IRQ__RTPS_DMA_EV5                  57
+#define RTPS_IRQ__RTPS_DMA_EV6                  58
+#define RTPS_IRQ__RTPS_DMA_EV7                  59
+
+
+// ******** HPPS interrupt controller inputs **************
+
+#define HPPS_IRQ__HPPS_UART0_0                   0
+#define HPPS_IRQ__HPPS_UART0_1                   1
+
+#define HPPS_IRQ__HT_MBOX_0                      2
+#define HPPS_IRQ__HT_MBOX_1                      3
+#define HPPS_IRQ__HT_MBOX_2                      4
+#define HPPS_IRQ__HT_MBOX_3                      5
+#define HPPS_IRQ__HT_MBOX_4                      6
+#define HPPS_IRQ__HT_MBOX_5                      7
+#define HPPS_IRQ__HT_MBOX_6                      8
+#define HPPS_IRQ__HT_MBOX_7                      9
+#define HPPS_IRQ__HT_MBOX_8                     10
+#define HPPS_IRQ__HT_MBOX_9                     11
+#define HPPS_IRQ__HT_MBOX_10                    12
+#define HPPS_IRQ__HT_MBOX_11                    13
+#define HPPS_IRQ__HT_MBOX_12                    14
+#define HPPS_IRQ__HT_MBOX_13                    15
+#define HPPS_IRQ__HT_MBOX_14                    16
+#define HPPS_IRQ__HT_MBOX_15                    17
+
+#define HPPS_IRQ__HR_MBOX_0                     18
+#define HPPS_IRQ__HR_MBOX_1                     19
+#define HPPS_IRQ__HR_MBOX_2                     20
+#define HPPS_IRQ__HR_MBOX_3                     21
+#define HPPS_IRQ__HR_MBOX_4                     22
+#define HPPS_IRQ__HR_MBOX_5                     23
+#define HPPS_IRQ__HR_MBOX_6                     24
+#define HPPS_IRQ__HR_MBOX_7                     25
+#define HPPS_IRQ__HR_MBOX_8                     26
+#define HPPS_IRQ__HR_MBOX_9                     27
+#define HPPS_IRQ__HR_MBOX_10                    28
+#define HPPS_IRQ__HR_MBOX_11                    29
+#define HPPS_IRQ__HR_MBOX_12                    30
+#define HPPS_IRQ__HR_MBOX_13                    31
+#define HPPS_IRQ__HR_MBOX_14                    32
+#define HPPS_IRQ__HR_MBOX_15                    33
+
+#define HPPS_IRQ__HPPS_SMMU_GLOB                34
+#define HPPS_IRQ__HPPS_SMMU_CB_0                35
+#define HPPS_IRQ__HPPS_SMMU_CB_1                36
+#define HPPS_IRQ__HPPS_SMMU_CB_2                37
+#define HPPS_IRQ__HPPS_SMMU_CB_3                38
+#define HPPS_IRQ__HPPS_SMMU_CB_4                39
+#define HPPS_IRQ__HPPS_SMMU_CB_5                40
+#define HPPS_IRQ__HPPS_SMMU_CB_6                41
+#define HPPS_IRQ__HPPS_SMMU_CB_7                42
+#define HPPS_IRQ__HPPS_SMMU_CB_8                43
+#define HPPS_IRQ__HPPS_SMMU_CB_9                44
+#define HPPS_IRQ__HPPS_SMMU_CB_10               45
+#define HPPS_IRQ__HPPS_SMMU_CB_11               46
+#define HPPS_IRQ__HPPS_SMMU_CB_12               47
+#define HPPS_IRQ__HPPS_SMMU_CB_13               48
+#define HPPS_IRQ__HPPS_SMMU_CB_14               49
+#define HPPS_IRQ__HPPS_SMMU_CB_15               50
+
+#define HPPS_IRQ__HPPS_DMA_ABORT                51
+#define HPPS_IRQ__HPPS_DMA_EV0                  52
+#define HPPS_IRQ__HPPS_DMA_EV1                  53
+#define HPPS_IRQ__HPPS_DMA_EV2                  54
+#define HPPS_IRQ__HPPS_DMA_EV3                  55
+#define HPPS_IRQ__HPPS_DMA_EV4                  56
+#define HPPS_IRQ__HPPS_DMA_EV5                  57
+#define HPPS_IRQ__HPPS_DMA_EV6                  58
+#define HPPS_IRQ__HPPS_DMA_EV7                  59
+
+#define HPPS_IRQ__SRIO0_DMA_ABORT               60
+#define HPPS_IRQ__SRIO0_DMA_EV0                 61
+#define HPPS_IRQ__SRIO0_DMA_EV1                 62
+#define HPPS_IRQ__SRIO0_DMA_EV2                 63
+#define HPPS_IRQ__SRIO0_DMA_EV3                 64
+#define HPPS_IRQ__SRIO0_DMA_EV4                 65
+#define HPPS_IRQ__SRIO0_DMA_EV5                 66
+#define HPPS_IRQ__SRIO0_DMA_EV6                 67
+#define HPPS_IRQ__SRIO0_DMA_EV7                 68
+
+#define HPPS_IRQ__SRIO1_DMA_ABORT               69
+#define HPPS_IRQ__SRIO1_DMA_EV0                 70
+#define HPPS_IRQ__SRIO1_DMA_EV1                 71
+#define HPPS_IRQ__SRIO1_DMA_EV2                 72
+#define HPPS_IRQ__SRIO1_DMA_EV3                 73
+#define HPPS_IRQ__SRIO1_DMA_EV4                 74
+#define HPPS_IRQ__SRIO1_DMA_EV5                 75
+#define HPPS_IRQ__SRIO1_DMA_EV6                 76
+#define HPPS_IRQ__SRIO1_DMA_EV7                 77
+
+#define HPPS_IRQ__XGMAC                         78
+#define HPPS_IRQ__XGMAC_WAKE                    79
+
+#define HPPS_IRQ__HPPS_SMC                      80
+
+#define HPPS_IRQ__IPI0                          81
+
+#define HPPS_IRQ__PMU_0                         82
+#define HPPS_IRQ__PMU_1                         83
+#define HPPS_IRQ__PMU_2                         84
+#define HPPS_IRQ__PMU_3                         85
+#define HPPS_IRQ__PMU_4                         86
+#define HPPS_IRQ__PMU_5                         87
+#define HPPS_IRQ__PMU_6                         88
+#define HPPS_IRQ__PMU_7                         89
+
+
+// *** HPPS and RTPS: GIC PPI IRQs ***
+
+#define PPI_IRQ__WDT                             8
+#define PPI_IRQ__GIC_MAINT                       9
+
+// See Table 2-2 in ARM GIC Spec for recommended assignment,
+// and note that PPI ID = INTID - GIC_NR_SGIS = INTID-16
+#define PPI_IRQ__TIMER_HYP                      10
+#define PPI_IRQ__TIMER_VIRT                     11
+#define PPI_IRQ__TIMER_SEC                      13
+#define PPI_IRQ__TIMER_PHYS                     14

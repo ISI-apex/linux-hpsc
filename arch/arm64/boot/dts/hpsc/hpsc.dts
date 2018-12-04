@@ -1,27 +1,12 @@
 /dts-v1/;
 
 #include <dt-bindings/phy/phy.h>
+
+/* Copies from Qemu Device Tree repo */
+#include "hpsc-irqs.dtsh"
+#include "hpsc-busids.dtsh"
+
 #include "mailbox-map.h" /* same file also present in other subsystems */
-
-#define MASTER_ID_TRCH_CPU  0x2d
-
-#define MASTER_ID_RTPS_CPU0 0x2e
-#define MASTER_ID_RTPS_CPU1 0x2f
-
-#define MASTER_ID_HPPS_CPU0 0x80
-#define MASTER_ID_HPPS_CPU1 0x8d
-#define MASTER_ID_HPPS_CPU2 0x8e
-#define MASTER_ID_HPPS_CPU3 0x8f
-#define MASTER_ID_HPPS_CPU4 0x90
-#define MASTER_ID_HPPS_CPU5 0x9d
-#define MASTER_ID_HPPS_CPU6 0x9e
-#define MASTER_ID_HPPS_CPU7 0x9f
-
-#define MASTER_ID_SMC       0x872
-#define MASTER_ID_XGMAC     0x874
-#define MASTER_ID_HPPS_DMA  0x877
-#define MASTER_ID_SRIO0_DMA 0x878
-#define MASTER_ID_SRIO1_DMA 0x879
 
 #define GIC_SPI 0
 #define GIC_PPI 1
@@ -30,10 +15,6 @@
 #define GIC_EDGE_BOTH 3
 #define GIC_LVL_HI 4
 #define GIC_LVL_LO 8
-
-/* Defined as a macro, since used in multiple places, because
-   the scope of this ID is private to a CPU */
-#define WDT_PPI_IRQ                      8
 
 / {
 	model = "HPSC";
@@ -216,17 +197,16 @@
 	pmu {
 		compatible = "arm,armv8-pmuv3";
 		interrupt-parent = <&gic>;
-		interrupts = <GIC_SPI 143 GIC_LVL_HI>,
-			     <GIC_SPI 144 GIC_LVL_HI>,
-			     <GIC_SPI 145 GIC_LVL_HI>,
-			     <GIC_SPI 146 GIC_LVL_HI>,
-			     <GIC_SPI 147 GIC_LVL_HI>,
-			     <GIC_SPI 148 GIC_LVL_HI>,
-			     <GIC_SPI 149 GIC_LVL_HI>,
-			     <GIC_SPI 150 GIC_LVL_HI>;
-		interrupt-affinity = <&cpul0>, <&cpul1>, <&cpul2>,
-				     <&cpul3>, <&cpub0>, <&cpub1>,
-				     <&cpub2>, <&cpub3>;
+		interrupts = <GIC_SPI HPPS_IRQ__PMU_0 GIC_LVL_HI>,
+			     <GIC_SPI HPPS_IRQ__PMU_1 GIC_LVL_HI>,
+			     <GIC_SPI HPPS_IRQ__PMU_2 GIC_LVL_HI>,
+			     <GIC_SPI HPPS_IRQ__PMU_3 GIC_LVL_HI>,
+			     <GIC_SPI HPPS_IRQ__PMU_4 GIC_LVL_HI>,
+			     <GIC_SPI HPPS_IRQ__PMU_5 GIC_LVL_HI>,
+			     <GIC_SPI HPPS_IRQ__PMU_6 GIC_LVL_HI>,
+			     <GIC_SPI HPPS_IRQ__PMU_7 GIC_LVL_HI>;
+		interrupt-affinity = <&cpul0>, <&cpul1>, <&cpul2>, <&cpul3>,
+                                     <&cpub0>, <&cpub1>, <&cpub2>, <&cpub3>;
 	};
 
 	psci {
@@ -237,10 +217,10 @@
 	timer {
 		compatible = "arm,armv8-timer";
 		interrupt-parent = <&gic>;
-		interrupts = <GIC_PPI 13 GIC_LVL_LO>,
-			     <GIC_PPI 14 GIC_LVL_LO>,
-			     <GIC_PPI 11 GIC_LVL_LO>,
-			     <GIC_PPI 10 GIC_LVL_LO>;
+		interrupts = <GIC_PPI PPI_IRQ__TIMER_SEC  GIC_LVL_LO>,
+			     <GIC_PPI PPI_IRQ__TIMER_PHYS GIC_LVL_LO>,
+			     <GIC_PPI PPI_IRQ__TIMER_VIRT GIC_LVL_LO>,
+			     <GIC_PPI PPI_IRQ__TIMER_HYP  GIC_LVL_LO>;
 	};
 
 	edac {
@@ -264,7 +244,7 @@
 			reg = <0x0 0xf9000000 0x20000>,
 			      <0x0 0xf9100000 0x100000>;
 			interrupt-controller;
-			interrupts = <GIC_PPI 9 GIC_LVL_HI>;
+			interrupts = <GIC_PPI PPI_IRQ__GIC_MAINT GIC_LVL_HI>;
 		};
 	};
 
@@ -278,7 +258,8 @@
 			compatible = "cdns,zynqmp-gem";
 			status = "okay";
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI 57 GIC_LVL_HI>, <GIC_SPI 58 GIC_LVL_HI>;
+			interrupts = <GIC_SPI HPPS_IRQ__XGMAC      GIC_LVL_HI>,
+                                     <GIC_SPI HPPS_IRQ__XGMAC_WAKE GIC_LVL_HI>;
 			reg = <0x0 0xe5300000 0x0 0x1000>;
 			clocks = <&clk125>, <&clk125>, <&clk125>;
 			clock-names = "pclk", "hclk", "tx_clk";
@@ -309,11 +290,11 @@
 			msi-controller;
 			device_type = "pci";
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI 118 GIC_LVL_HI>,
-				     <GIC_SPI 117 GIC_LVL_HI>,
-				     <GIC_SPI 116 GIC_LVL_HI>,
-				     <GIC_SPI 115 GIC_LVL_HI>,	/* MSI_1 [63...32] */
-				     <GIC_SPI 114 GIC_LVL_HI>;	/* MSI_0 [31...0] */
+			interrupts = <GIC_SPI ? GIC_LVL_HI>,
+				     <GIC_SPI ? GIC_LVL_HI>,
+				     <GIC_SPI ? GIC_LVL_HI>,
+				     <GIC_SPI ? GIC_LVL_HI>,	/* MSI_1 [63...32] */
+				     <GIC_SPI ? GIC_LVL_HI>;	/* MSI_0 [31...0] */
 			interrupt-names = "misc","dummy","intx", "msi1", "msi0";
 			msi-parent = <&pcie>;
 			reg = <0x0 0xe5330000 0x0 0x1000>,
@@ -342,23 +323,31 @@
 			#iommu-cells = <1>;
 			#global-interrupts = <1>;
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI 152 GIC_LVL_HI>, /* global irq */
+			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMMU_GLOB GIC_LVL_HI>, /* global irq */
                                 /* context IRQs */
-                                <GIC_SPI 153 GIC_LVL_HI>, <GIC_SPI 154 GIC_LVL_HI>,
-                                <GIC_SPI 155 GIC_LVL_HI>, <GIC_SPI 156 GIC_LVL_HI>,
-                                <GIC_SPI 157 GIC_LVL_HI>, <GIC_SPI 158 GIC_LVL_HI>,
-                                <GIC_SPI 159 GIC_LVL_HI>, <GIC_SPI 160 GIC_LVL_HI>,
-                                <GIC_SPI 161 GIC_LVL_HI>, <GIC_SPI 162 GIC_LVL_HI>,
-                                <GIC_SPI 163 GIC_LVL_HI>, <GIC_SPI 164 GIC_LVL_HI>,
-                                <GIC_SPI 165 GIC_LVL_HI>, <GIC_SPI 166 GIC_LVL_HI>,
-                                <GIC_SPI 167 GIC_LVL_HI>, <GIC_SPI 168 GIC_LVL_HI>;
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_0 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_1 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_2 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_3 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_4 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_5 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_6 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_7 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_8 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_9 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_10 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_11 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_12 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_13 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_14 GIC_LVL_HI>,
+                                <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_15 GIC_LVL_HI>;
 		};
 
 		uart0: serial@f92c0000 {
 			compatible = "cdns,uart-r1p12", "xlnx,xuartps";
 			status = "okay";
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI 23 GIC_LVL_HI>;
+			interrupts = <GIC_SPI HPPS_IRQ__HPPS_UART0_0 GIC_LVL_HI>;
 			reg = <0x0 0xf92c0000 0x0 0x1000>;
 			clocks = <&clk100 &clk100>;
 			clock-names = "uart_clk", "pclk";
@@ -376,14 +365,22 @@
 			 * actual within-ip-block index of the interrupt (and
 			 * if we do, we'd still need an extra property to define
 			 * the starting irq number, which is worse. */
-                        interrupts = <GIC_SPI 136 GIC_LVL_HI>, <GIC_SPI 137 GIC_LVL_HI>,
-                                     <GIC_SPI 138 GIC_LVL_HI>, <GIC_SPI 139 GIC_LVL_HI>,
-                                     <GIC_SPI 140 GIC_LVL_HI>, <GIC_SPI 141 GIC_LVL_HI>,
-                                     <GIC_SPI 142 GIC_LVL_HI>, <GIC_SPI 143 GIC_LVL_HI>,
-                                     <GIC_SPI 144 GIC_LVL_HI>, <GIC_SPI 145 GIC_LVL_HI>,
-                                     <GIC_SPI 146 GIC_LVL_HI>, <GIC_SPI 147 GIC_LVL_HI>,
-                                     <GIC_SPI 148 GIC_LVL_HI>, <GIC_SPI 149 GIC_LVL_HI>,
-                                     <GIC_SPI 150 GIC_LVL_HI>, <GIC_SPI 151 GIC_LVL_HI>;
+			interrupts = <GIC_SPI HPPS_IRQ__HT_MBOX_0  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_1  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_2  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_3  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_4  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_5  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_6  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_7  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_8  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_9  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_10 GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_11 GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_12 GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_13 GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_14 GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HT_MBOX_15 GIC_LVL_HI>;
 
 			/* Map all instances onto one pair of IRQs,
 			 * this pair must be not be used by other subsystems */
@@ -403,15 +400,22 @@
 			compatible = "hpsc,hpsc-mbox";
                         reg = <0x0 0xfff60000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
-
-                        interrupts = <GIC_SPI 203 GIC_LVL_HI>, <GIC_SPI 204 GIC_LVL_HI>,
-                                     <GIC_SPI 205 GIC_LVL_HI>, <GIC_SPI 206 GIC_LVL_HI>,
-                                     <GIC_SPI 207 GIC_LVL_HI>, <GIC_SPI 208 GIC_LVL_HI>,
-                                     <GIC_SPI 209 GIC_LVL_HI>, <GIC_SPI 210 GIC_LVL_HI>,
-                                     <GIC_SPI 211 GIC_LVL_HI>, <GIC_SPI 212 GIC_LVL_HI>,
-                                     <GIC_SPI 213 GIC_LVL_HI>, <GIC_SPI 214 GIC_LVL_HI>,
-                                     <GIC_SPI 215 GIC_LVL_HI>, <GIC_SPI 216 GIC_LVL_HI>,
-                                     <GIC_SPI 217 GIC_LVL_HI>, <GIC_SPI 218 GIC_LVL_HI>;
+			interrupts = <GIC_SPI HPPS_IRQ__HR_MBOX_0  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_1  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_2  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_3  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_4  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_5  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_6  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_7  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_8  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_9  GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_10 GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_11 GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_12 GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_13 GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_14 GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HR_MBOX_15 GIC_LVL_HI>;
 
 			interrupt-idx-rcv = <MBOX_HPPS_RTPS__HPPS_RCV_INT>;
 			interrupt-idx-ack = <MBOX_HPPS_RTPS__HPPS_ACK_INT>;
@@ -516,7 +520,7 @@
 			compatible = "hpsc,hpsc-wdt";
 			reg = <0x0 0xfff70000 0x0 0x80000>;
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_PPI WDT_PPI_IRQ GIC_LVL_HI>;
+			interrupts = <GIC_PPI PPI_IRQ__WDT GIC_LVL_HI>;
 		};
 
 		hpps_dma: dma-controller@0xf92e0000 {
@@ -524,7 +528,8 @@
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0xf92e0000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI 63 GIC_LVL_HI>, <GIC_SPI 64 GIC_LVL_HI>;
+			interrupts = <GIC_SPI HPPS_IRQ__HPPS_DMA_ABORT GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__HPPS_DMA_EV0   GIC_LVL_HI>;
 			iommus = <&smmu MASTER_ID_HPPS_DMA>;
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
@@ -535,7 +540,8 @@
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0xe5310000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI 65 GIC_LVL_HI>, <GIC_SPI 66 GIC_LVL_HI>;
+			interrupts = <GIC_SPI HPPS_IRQ__SRIO0_DMA_ABORT GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__SRIO0_DMA_EV0   GIC_LVL_HI>;
 			iommus = <&smmu MASTER_ID_SRIO0_DMA>;
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
@@ -546,7 +552,8 @@
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
 			reg = <0x0 0xe5330000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI 67 GIC_LVL_HI>, <GIC_SPI 68 GIC_LVL_HI>;
+			interrupts = <GIC_SPI HPPS_IRQ__SRIO1_DMA_ABORT GIC_LVL_HI>,
+				     <GIC_SPI HPPS_IRQ__SRIO1_DMA_EV0 GIC_LVL_HI>;
 			iommus = <&smmu MASTER_ID_SRIO1_DMA>;
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
@@ -560,7 +567,7 @@
 			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
 			compatible = "arm,pl353-smc-r2p1";
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI 14 GIC_LVL_HI>;
+			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC GIC_LVL_HI>;
 			ranges ;
 			reg = <0x0 0xf92d0000 0x0 0x1000>;
 			nand0: nand0@600000000 {
