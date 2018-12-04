@@ -234,13 +234,6 @@
 		method = "smc";
 	};
 
-	firmware {
-		compatible = "xlnx,zynqmp-pm";
-		method = "smc";
-		interrupt-parent = <&gic>;
-		interrupts = <GIC_SPI 35 GIC_LVL_HI>;
-	};
-
 	timer {
 		compatible = "arm,armv8-timer";
 		interrupt-parent = <&gic>;
