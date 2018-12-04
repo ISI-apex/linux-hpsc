@@ -28,11 +28,17 @@
 #define REG__CONFIG__TICKDIV_MASK  0xFF
 #define REG__STATUS__ST1_TIMEOUT 0x1
 
-#define CMD_CLEAR_ARM  0xcd05
-#define CMD_CLEAR_FIRE 0x05cd
+// Clearing first stage clears all stages, hence only one clear cmd
+#define CMD_CLEAR_ARM		0xcd05
+#define CMD_CLEAR_FIRE		0x05cd
+#define CMD_CAPTURE_ST1_ARM	0xcd01
+#define CMD_CAPTURE_ST1_FIRE	0x01cd
+#define CMD_CAPTURE_ST2_ARM	0xcd02
+#define CMD_CAPTURE_ST2_FIRE	0x02cd
 
 #define HPSC_WDT_SIZE 0x10000
 #define HPSC_WDT_CLK_FREQ_HZ 3906250
+#define HPSC_WDT_TICKDIV_MAX 8
 
 struct hpsc_wdt { // per cpu
 	struct watchdog_device	wdd;
@@ -66,6 +72,38 @@ static DEFINE_PER_CPU(struct hpsc_wdt, per_cpu_wdt);
 // to maintain the global state of the single instance as static variables.
 static unsigned hpsc_wdt_irq;
 
+
+static unsigned int cycles_to_sec(struct hpsc_wdt *wdt, unsigned int cycles)
+{
+	u64 config = readl(wdt->regs + REG__CONFIG);
+	unsigned int tickdiv = ((config >> REG__CONFIG__TICKDIV_SHIFT) &
+					REG__CONFIG__TICKDIV_MASK) + 1;
+	return cycles / (HPSC_WDT_CLK_FREQ_HZ / tickdiv);
+}
+static unsigned int get_count(struct hpsc_wdt *wdt)
+{
+	u64 count;
+
+	// There is one logical 64-bit timer presented by HW. This implies that
+	// the sum of all stages has to be within 64-bits, enforced by HW.
+
+	writel(CMD_CAPTURE_ST1_ARM, wdt->regs + REG__CMD_ARM);
+	writel(CMD_CAPTURE_ST1_FIRE, wdt->regs + REG__CMD_FIRE);
+	count = readq(wdt->regs + REG__ST1_COUNT);
+
+	writel(CMD_CAPTURE_ST2_ARM, wdt->regs + REG__CMD_ARM);
+	writel(CMD_CAPTURE_ST2_FIRE, wdt->regs + REG__CMD_FIRE);
+	count += readq(wdt->regs + REG__ST2_COUNT);
+
+	return count;
+}
+static unsigned int get_terminal(struct hpsc_wdt *wdt)
+{
+	// HW guarantees no overflow (see comment above)
+	return readq(wdt->regs + REG__ST1_TERMINAL) +
+	       readq(wdt->regs + REG__ST2_TERMINAL);
+}
+
 static irqreturn_t hpsc_wdt_timeout(int irq, void *priv)
 {
 	struct hpsc_wdt *wdt = priv;
@@ -81,21 +119,6 @@ static irqreturn_t hpsc_wdt_timeout(int irq, void *priv)
 
 	watchdog_notify_pretimeout(&wdt->wdd);
 	return IRQ_HANDLED;
-}
-
-// TERMINAL and COUNT registers store time values in nanoseconds, but we report
-// values in seconds and must handle overflow converting to uint.
-static unsigned int hpsc_wdt_sum_sec(struct hpsc_wdt *wdt, size_t off1,
-				     size_t off2)
-{
-	u64 config = readl(wdt->regs + REG__CONFIG);
-	u32 tickdiv = ((config >> REG__CONFIG__TICKDIV_SHIFT) &
-	               REG__CONFIG__TICKDIV_MASK) + 1;
-	u64 sec1 = readq(wdt->regs + off1) / (HPSC_WDT_CLK_FREQ_HZ / tickdiv);
-	u64 sec2 = readq(wdt->regs + off2) / (HPSC_WDT_CLK_FREQ_HZ / tickdiv);
-	if (sec1 > UINT_MAX || sec2 > UINT_MAX || sec1 + sec2 > UINT_MAX)
-		return UINT_MAX;
-	return sec1 + sec2;
 }
 
 static int hpsc_wdt_check_cpu(struct hpsc_wdt *wdt, int cpu, const char *op)
@@ -182,13 +205,10 @@ out:
 
 static unsigned int hpsc_wdt_get_timeleft(struct watchdog_device *wdog)
 {
-	// TODO: are we actually able to read the COUNT registers?
 	struct hpsc_wdt *wdt = watchdog_get_drvdata(wdog);
-	unsigned int timeout = hpsc_wdt_sum_sec(wdt, REG__ST1_TERMINAL,
-						REG__ST2_TERMINAL);
-	unsigned int count = hpsc_wdt_sum_sec(wdt, REG__ST1_COUNT,
-					      REG__ST2_COUNT);
-	return timeout > count ? timeout - count : 0;
+	unsigned int timeout = get_terminal(wdt);
+	unsigned int count = get_count(wdt);
+	return timeout > count ? cycles_to_sec(wdt, timeout - count) : 0;
 }
 
 static int hpsc_wdt_cpu_up(unsigned int cpu)
@@ -227,28 +247,28 @@ static void hpsc_wdt_wdd_init(struct watchdog_device *wdd)
 	wdd->parent =		NULL;
 	wdd->info =		&hpsc_wdt_info;
 	wdd->ops =		&hpsc_wdt_ops;
-	wdd->min_timeout =	0;
-	wdd->max_timeout =	~0;
+	wdd->min_timeout =	0; // sec
+	wdd->max_timeout =	~0 / (HPSC_WDT_CLK_FREQ_HZ / HPSC_WDT_TICKDIV_MAX); // sec
 }
 
 static int hpsc_wdt_percpu_init(struct hpsc_wdt *wdt, unsigned cpu)
 {
-	unsigned int timeout;
+	unsigned int timeout_sec;
 	int err;
 
 	hpsc_wdt_wdd_init(&wdt->wdd);
 	watchdog_set_drvdata(&wdt->wdd, wdt);
 
-	timeout = hpsc_wdt_sum_sec(wdt, REG__ST1_TERMINAL, REG__ST2_TERMINAL);
-	watchdog_init_timeout(&wdt->wdd, timeout, NULL);
+	timeout_sec = cycles_to_sec(wdt, get_terminal(wdt));
+	watchdog_init_timeout(&wdt->wdd, timeout_sec, NULL);
 
 	err = watchdog_register_device(&wdt->wdd);
 	if (err) {
 		pr_err("HPSC WDT: Failed to register watchdog device");
 		return err;
 	}
-	pr_info("HPSC WDT: registered WDD id %d for cpu %u: timeout %x\n",
-		 wdt->wdd.id, cpu, timeout);
+	pr_info("HPSC WDT: registered WDD id %d for cpu %u: timeout %u sec\n",
+		 wdt->wdd.id, cpu, timeout_sec);
 	return 0;
 }
 
