@@ -53,16 +53,22 @@
 
         /* NOTE: memory { } nodes appended by u-boot from its device tree */
 
-        reserved-memory@atf { /* TOOD: confirm that this is respected, also can/should this be in u-boot DT? */
-                /* TODO: is ATF resident? (my guess is, yes). If so, we must stay out of its region. */
-                /* NOTE: in Xilinx zcu102 default config, ATF resides in APU's
-                 * OCM, but Chiplet doesn't have that OCM, so we put ATF in HPPS DDR LOW */
-                reg = <0x0 0x80000000 0x0 0x100000>;
-        };
-        reserved-memory@mmu { /* TOOD: confirm that this is respected, also can/should this be in u-boot DT? */
-                /* for RTPS<->HPPS MMU page table and space for MMU test data */
-                reg = <0x0 0x8e000000 0x0 0x2000>;
-        };
+	reserved-memory { /* TOOD: confirm that this is respected, also can/should this be in u-boot DT? */
+		#address-cells = <2>;
+		#size-cells = <2>;
+
+		/* TODO: is ATF resident? (my guess is, yes). If so, we must stay out of its region. */
+		/* NOTE: in Xilinx zcu102 default config, ATF resides in APU's
+		 * OCM, but Chiplet doesn't have that OCM, so we put ATF in HPPS DDR LOW */
+		atf {
+			reg = <0x0 0x80000000 0x0 0x100000>;
+		};
+
+		/* for RTPS<->HPPS MMU page table and space for MMU test data */
+		rtps_hpps_mmu {
+			reg = <0x0 0x8e000000 0x0 0x2000>;
+		};
+	};
 
 	cpus {
 		#address-cells = <1>;
