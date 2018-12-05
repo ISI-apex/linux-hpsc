@@ -84,8 +84,8 @@ static unsigned int get_count(struct hpsc_wdt *wdt)
 {
 	u64 count;
 
-	// There is one logical 64-bit timer presented by HW. This implies that
-	// the sum of all stages has to be within 64-bits, enforced by HW.
+	// Assuming that HW counter width is <64 => no overflow.
+	// Note: for Concept A HW variant we wouldn't add.
 
 	writel(CMD_CAPTURE_ST1_ARM, wdt->regs + REG__CMD_ARM);
 	writel(CMD_CAPTURE_ST1_FIRE, wdt->regs + REG__CMD_FIRE);
@@ -99,7 +99,8 @@ static unsigned int get_count(struct hpsc_wdt *wdt)
 }
 static unsigned int get_terminal(struct hpsc_wdt *wdt)
 {
-	// HW guarantees no overflow (see comment above)
+	// Assuming taht HW counter width is <64 bits => no overflow.
+	// Note: for Concept A HW variant we wouldn't add.
 	return readq(wdt->regs + REG__ST1_TERMINAL) +
 	       readq(wdt->regs + REG__ST2_TERMINAL);
 }
