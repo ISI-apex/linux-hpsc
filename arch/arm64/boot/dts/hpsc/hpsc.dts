@@ -47,7 +47,7 @@
 
 		/* for RTPS<->HPPS MMU page table and space for MMU test data */
 		rtps_hpps_mmu {
-			reg = <0x0 0x8e000000 0x0 0x2000>;
+			reg = <0x0 0x8e000000 0x0 0x200000>;
 		};
 	};
 
