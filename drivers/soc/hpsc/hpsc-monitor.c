@@ -58,11 +58,19 @@ static struct notifier_block hpsc_monitor_panic_nb = {
 static int hpsc_monitor_wdt(struct notifier_block *nb, unsigned long action,
 			    void *data)
 {
+	static atomic_t is_in_poweroff = ATOMIC_INIT(0);
 	hpsc_msg_wdt_timeout(action);
-	pr_crit("hpsc_monitor_wdt: initiating poweroff\n");
-	orderly_poweroff(true);
-	// if we get this far, then poweroff failed
-	return NOTIFY_BAD;
+	if (atomic_cmpxchg(&is_in_poweroff, 0, 1)) {
+		pr_crit("hpsc_monitor_wdt: poweroff already in progress\n");
+	} else {
+		pr_crit("hpsc_monitor_wdt: initiating poweroff\n");
+		orderly_poweroff(true);
+		// if we get this far, then poweroff failed
+		// let another thread retry on timeout, or wait for HW WDT reset
+		atomic_set(&is_in_poweroff, 1);
+		return NOTIFY_BAD;
+	}
+	return NOTIFY_OK;
 }
 
 static struct notifier_block hpsc_monitor_wdt_nb = {
