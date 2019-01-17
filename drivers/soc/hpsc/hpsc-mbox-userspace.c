@@ -219,15 +219,10 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 	unsigned long flags;
 	ssize_t ret;
 
-	if (count > MBOX_MAX_MSG_LEN) {
-		dev_err(tdev->dev, "message too long: %zd > %d\n", count,
-			MBOX_MAX_MSG_LEN);
-		return -EINVAL;
-	}
-	ret = copy_from_user(msg, userbuf, count);
-	if (ret) {
+	ret = simple_write_to_buffer(msg, MBOX_MAX_MSG_LEN, ppos, userbuf, count);
+	if (ret < 0) {
 		dev_err(tdev->dev, "failed to copy msg data from userspace\n");
-		return -EFAULT;
+		return ret;
 	}
 	print_hex_dump_bytes("mailbox send: ", DUMP_PREFIX_ADDRESS,
 			     msg, MBOX_MAX_MSG_LEN);
