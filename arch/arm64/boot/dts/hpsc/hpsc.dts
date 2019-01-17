@@ -514,6 +514,27 @@
 			interrupts = <GIC_PPI PPI_IRQ__WDT GIC_LVL_HI>;
 		};
 
+		hpps_rti_tmr: hpsc-rti-tmr@0xfeed0000 {
+			compatible = "hpsc,hpsc-rti-timer";
+			reg = <0x0 0xfeed0000 0x0 0x80000>;
+			interrupt-parent = <&gic>;
+			interrupts = <GIC_PPI PPI_IRQ__RTI_TIMER GIC_EDGE_RISE>;
+			#timer-cells = <1>; /* cpu index */
+		};
+
+		interval-dev {
+			compatible = "interval-dev";
+			devname = "rti_timer";
+			timers = <&hpps_rti_tmr 0>,
+				 <&hpps_rti_tmr 1>,
+				 <&hpps_rti_tmr 2>,
+				 <&hpps_rti_tmr 3>,
+				 <&hpps_rti_tmr 4>,
+				 <&hpps_rti_tmr 5>,
+				 <&hpps_rti_tmr 6>,
+				 <&hpps_rti_tmr 7>;
+		};
+
 		hpps_dma: dma-controller@0xf92e0000 {
 			#dma-cells = <1>;
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
