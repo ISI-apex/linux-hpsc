@@ -3,8 +3,8 @@
 #define TRCH_IRQ__WDT_TRCH_ST1                   0
 // no ST2 IRQ, because it's wired to reset in HW
 
-#define TRCH_IRQ__WDT_RTPS0_ST2                  1
-#define TRCH_IRQ__WDT_RTPS1_ST2                  2
+#define TRCH_IRQ__WDT_RTPS_R52_0_ST2             1
+#define TRCH_IRQ__WDT_RTPS_R52_1_ST2             2
 
 #define TRCH_IRQ__WDT_HPPS0_ST2                  3
 #define TRCH_IRQ__WDT_HPPS1_ST2                  4
@@ -81,6 +81,10 @@
 #define TRCH_IRQ__TRCH_DMA_EV7                  70
 
 #define TRCH_IRQ__TRCH_SMC                      71
+#define TRCH_IRQ__ELAPSED_TIMER                 72
+
+#define TRCH_IRQ__WDT_RTPS_A53_ST2              73 /* TODO: move to WDTs */
+#define TRCH_IRQ__RTI_TIMER                     74
 
 
 // ******** RTPS interrupt controller inputs **************
@@ -257,6 +261,7 @@
 
 // *** HPPS and RTPS: GIC PPI IRQs ***
 
+#define PPI_IRQ__RTI_TIMER                       7
 #define PPI_IRQ__WDT                             8
 #define PPI_IRQ__GIC_MAINT                       9
 
