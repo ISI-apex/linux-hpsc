@@ -657,4 +657,14 @@ config MILBEAUT_TIMER
 	help
 	  Enables the support for Milbeaut timer driver.
 
+config INTERVAL_DEV
+	bool "Device files for interval timers"
+        select INTERVAL_TIMER
+	help
+          Driver for a device tree node that accepts a list of references
+          to timers and creates character device files for those timers.
+          The timers must implement the "interval timer" interface, i.e.
+          expose a callback invoked periodically, and methods to set the
+          period and read the timer counter value.
+
 endmenu
