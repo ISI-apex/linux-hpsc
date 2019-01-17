@@ -657,6 +657,14 @@ config MILBEAUT_TIMER
 	help
 	  Enables the support for Milbeaut timer driver.
 
+config HPSC_RTI_TIMER
+	bool "HPSC Real-Time Interrupt Timer driver"
+        select INTERVAL_TIMER
+	help
+          Enables the support for the HSPC Real-Time Interrupt timers (one
+          timer per CPU core) and exposes the timer to userspace via
+          device files.
+
 config INTERVAL_DEV
 	bool "Device files for interval timers"
         select INTERVAL_TIMER
