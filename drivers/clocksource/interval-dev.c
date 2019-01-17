@@ -126,7 +126,11 @@ static ssize_t interval_dev_write(struct file *filp, const char __user *userbuf,
 		dev_dbg(dev, "timer device does not support set interval\n");
 		return -ENOSYS;
 	}
-	itmr->ops->set_interval(itmr, interval);
+	ret = itmr->ops->set_interval(itmr, interval);
+	if (ret) {
+		dev_dbg(dev, "failed to set interval on timer: rc %d\n", ret);
+		return ret;
+	}
 	return count;
 }
 
