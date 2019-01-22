@@ -13,6 +13,9 @@ config TIMER_ACPI
 config TIMER_PROBE
 	bool
 
+config INTERVAL_TIMER
+        bool
+
 config CLKSRC_I8253
 	bool
 
@@ -614,5 +617,23 @@ config CLKSRC_ST_LPC
 	help
 	  Enable this option to use the Low Power controller timer
 	  as clocksource.
+
+config HPSC_RTI_TIMER
+	bool "HPSC Real-Time Interrupt Timer driver"
+        select INTERVAL_TIMER
+	help
+          Enables the support for the HSPC Real-Time Interrupt timers (one
+          timer per CPU core) and exposes the timer to userspace via
+          device files.
+
+config INTERVAL_DEV
+	bool "Device files for interval timers"
+        select INTERVAL_TIMER
+	help
+          Driver for a device tree node that accepts a list of references
+          to timers and creates character device files for those timers.
+          The timers must implement the "interval timer" interface, i.e.
+          expose a callback invoked periodically, and methods to set the
+          period and read the timer counter value.
 
 endmenu
