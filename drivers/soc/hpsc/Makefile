@@ -5,5 +5,6 @@ obj-y += hpsc-notif.o
 obj-$(CONFIG_HPSC_MBOX_USERSPACE) += hpsc-mbox-userspace.o
 obj-$(CONFIG_HPSC_MBOX_KERNEL) += hpsc-mbox-kernel.o
 obj-$(CONFIG_HPSC_SHMEM) += hpsc-shmem.o
+obj-$(CONFIG_HPSC_KSHMEM) += hpsc-kshmem.o
 obj-y += hpsc-msg.o
 obj-y += hpsc-monitor.o
