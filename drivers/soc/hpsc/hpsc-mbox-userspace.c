@@ -219,7 +219,11 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 	unsigned long flags;
 	ssize_t ret;
 
-	ret = simple_write_to_buffer(msg, MBOX_MAX_MSG_LEN, ppos, userbuf, count);
+	if (*ppos)
+		return -EINVAL; // user shouldn't use pwrite with offset != 0
+	ret = simple_write_to_buffer(msg, MBOX_MAX_MSG_LEN, ppos, userbuf,
+				     count);
+	*ppos = 0; // always reset
 	if (ret < 0) {
 		dev_err(tdev->dev, "failed to copy msg data from userspace\n");
 		return ret;
@@ -259,6 +263,8 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 	unsigned long flags;
 	ssize_t ret;
 
+	if (*ppos)
+		return -EINVAL; // user shouldn't use pread with offset != 0
 	// This can race with channel state if user is behaving badly, but it
 	// won't be catastrophic - we still synchronize chan state changes
 	// At worst, we unnecessarily copy to userspace but still return an
@@ -273,6 +279,7 @@ static ssize_t mbox_read(struct file *filp, char __user *userbuf, size_t count,
 					      sizeof(chan->send_rc));
 	else
 		ret = -EAGAIN;
+	*ppos = 0; // always reset
 
 	if (ret >= 0) {
 		spin_lock_irqsave(&chan->lock, flags);
