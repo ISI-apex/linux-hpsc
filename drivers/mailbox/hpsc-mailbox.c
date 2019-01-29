@@ -10,6 +10,7 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
+#include <linux/spinlock.h>
 
 #define REG_CONFIG              0x00
 #define REG_EVENT_CAUSE         0x04
@@ -52,10 +53,16 @@ struct hpsc_mbox {
 	unsigned ack_irqnum;
 };
 
+// Locking really is necessary - there is a race condition between IRQs and
+// channel shutdown.
+// If an IRQ (or peek request) results in a callback to the mailbox API, and the
+// channel is closed before that callback completes, the mailbox API may
+// NULL-dereference the client pointer.
+// We must synchronize between closing channels and calling the mailbox API.
 struct hpsc_mbox_chan {
 	struct hpsc_mbox *mbox;
 	void __iomem *regs;
-
+	spinlock_t lock;
 	// Config from DT, stays constant
 	unsigned instance;
 	unsigned owner;
@@ -123,6 +130,7 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 	u32 data[HPSC_MBOX_DATA_REGS];
 	struct mbox_chan *link;
 	struct hpsc_mbox_chan *chan;
+	unsigned long flags;
 	int i;
 
 	// Check all mailbox instances; could do better if we maintain another
@@ -131,9 +139,10 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 	for (i = 0; i < mbox->controller.num_chans; ++i) {
 		link = &mbox->controller.chans[i];
 		chan = link->con_priv;
+		spin_lock_irqsave(&chan->lock, flags);
 
 		if (!hpsc_mbox_is_subscribed(chan, event, interrupt))
-			continue;
+			goto cont;
 
 		dev_dbg(mbox->controller.dev, "ISR %u instance %u\n", event,
 			chan->instance);
@@ -142,32 +151,18 @@ static irqreturn_t hpsc_mbox_isr(struct hpsc_mbox *mbox, unsigned event,
 		// the disambiguation code in both ISRs or using callbacks
 		switch (event) {
 		case HPSC_MBOX_EVENT_A:
-			// Note: Race condition on link->cl between if statement
-			// and mbox_chan_received_data, but using link->lock as
-			// a guard can deadlock. Since this is only an
-			// optimization to send NACKs, worst case scenario is
-			// that we don't NACK if channel is closed.
-			// Events should be cleared before sending new messages
-			// or [N]ACKs, otherwise IRQ may be raised again
-			if (likely(link->cl)) {
-				hpsc_mbox_memcpy_fromio(data,
-							chan->regs + REG_DATA);
-				hpsc_mbox_clear_event(chan, event);
-				mbox_chan_received_data(link, data);
-			} else {
-				dev_warn(mbox->controller.dev,
-					 "chan closed before IRQ handled: %u\n",
-					 chan->instance);
-				hpsc_mbox_clear_event(chan, event);
-				hpsc_mbox_send_ack(chan, -ENOLINK);
-			}
+			hpsc_mbox_memcpy_fromio(data,
+						chan->regs + REG_DATA);
+			hpsc_mbox_clear_event(chan, event);
+			mbox_chan_received_data(link, data);
 			break;
 		case HPSC_MBOX_EVENT_B:
-			// can't use link lock here, but we don't actually care
 			hpsc_mbox_clear_event(chan, event);
 			mbox_chan_txdone(link, /* status = OK */ 0);
 			break;
 		}
+cont:
+		spin_unlock_irqrestore(&chan->lock, flags);
 	}
 	return IRQ_HANDLED;
 }
@@ -315,9 +310,12 @@ static void hpsc_mbox_shutdown(struct mbox_chan *link)
 {
 	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
 	struct hpsc_mbox_chan *chan = link->con_priv;
+	unsigned long flags;
+	u32 ie;
 
+	spin_lock_irqsave(&chan->lock, flags);
 	// Could just rely on HW reset-on-release behavior, but for symmetry...
-	u32 ie = readl(chan->regs + REG_INT_ENABLE);
+	ie = readl(chan->regs + REG_INT_ENABLE);
 	ie &= ~HPSC_MBOX_INT_A(mbox->rcv_int_idx);
 	ie &= ~HPSC_MBOX_INT_B(mbox->ack_int_idx);
 	dev_dbg(mbox->controller.dev, "instance %u int_enable <- %08x (rcv)\n",
@@ -325,6 +323,7 @@ static void hpsc_mbox_shutdown(struct mbox_chan *link)
 	writel(ie, chan->regs + REG_INT_ENABLE);
 
 	hpsc_mbox_maybe_release_owner(chan);
+	spin_unlock_irqrestore(&chan->lock, flags);
 }
 
 static bool hpsc_mbox_peek_data(struct mbox_chan *link)
@@ -332,14 +331,18 @@ static bool hpsc_mbox_peek_data(struct mbox_chan *link)
 	u32 data[HPSC_MBOX_DATA_REGS];
 	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
 	struct hpsc_mbox_chan *chan = link->con_priv;
-	bool ret = hpsc_mbox_is_subscribed(chan, HPSC_MBOX_EVENT_A,
-					   HPSC_MBOX_INT_A(mbox->rcv_int_idx));
+	unsigned long flags;
+	bool ret;
+	spin_lock_irqsave(&chan->lock, flags);
+	ret = hpsc_mbox_is_subscribed(chan, HPSC_MBOX_EVENT_A,
+				      HPSC_MBOX_INT_A(mbox->rcv_int_idx));
 	dev_dbg(mbox->controller.dev, "peek: %s\n", ret ? "true" : "false");
 	if (ret) {
 		hpsc_mbox_memcpy_fromio(data, chan->regs + REG_DATA);
 		hpsc_mbox_clear_event(chan, HPSC_MBOX_EVENT_A);
 		mbox_chan_received_data(link, data);
 	}
+	spin_unlock_irqrestore(&chan->lock, flags);
 	return ret;
 }
 
@@ -385,6 +388,7 @@ static void hpsc_mbox_chans_init(struct hpsc_mbox_chan *hpsc_chans,
 		chan = &hpsc_chans[i];
 		chan->mbox = mbox;
 		chan->regs = mbox->regs + i * HPSC_MBOX_INSTANCE_REGION;
+		spin_lock_init(&chan->lock);
 		chan->instance = i;
 		mbox_chans[i].con_priv = chan;
 	}
