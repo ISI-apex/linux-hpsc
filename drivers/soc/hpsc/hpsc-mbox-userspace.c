@@ -194,26 +194,34 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 static int mbox_release(struct inode *inodep, struct file *filp)
 {
 	struct mbox_chan_dev *chan = filp->private_data;
+	struct mbox_chan *channel;
 	unsigned long flags;
 	spin_lock_irqsave(&chan->lock, flags);
 	if (unlikely(IS_ERR_OR_NULL(chan->channel))) {
 		dev_warn(chan->tdev->dev,
 			 "release: mailbox already closed: %u\n", chan->index);
-	} else {
-		if (chan->rx_msg_pending)
-			// send NACK since we're about to drop the message
-			hpsc_mbox_rx_ack(chan, -EPIPE);
-		mbox_free_channel(chan->channel);
-		chan->channel = NULL;
+		spin_unlock_irqrestore(&chan->lock, flags);
+		return 0;
 	}
+	if (chan->rx_msg_pending)
+		// send NACK since we're about to drop the message
+		hpsc_mbox_rx_ack(chan, -EPIPE);
+	channel = chan->channel;
+	// similar to open, don't set to NULL until we're finished
+	chan->channel = ERR_PTR(-ENODEV);
+	// release lock before freeing channel since driver may lock in both
+	// channel shutdown and during IRQs, which could cause a hang if both
+	// its lock and ours are held during a simultaneous close and IRQ.
 	spin_unlock_irqrestore(&chan->lock, flags);
+	mbox_free_channel(channel);
+	chan->channel = NULL;
 	return 0;
 }
 
 static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 			  size_t count, loff_t *ppos)
 {
-	u32 msg[HPSC_MBOX_DATA_REGS];
+	u8 msg[MBOX_MAX_MSG_LEN];
 	struct mbox_chan_dev *chan = filp->private_data;
 	struct mbox_client_dev *tdev = chan->tdev;
 	unsigned long flags;
@@ -221,15 +229,14 @@ static ssize_t mbox_write(struct file *filp, const char __user *userbuf,
 
 	if (*ppos)
 		return -EINVAL; // user shouldn't use pwrite with offset != 0
-	ret = simple_write_to_buffer(msg, MBOX_MAX_MSG_LEN, ppos, userbuf,
-				     count);
+	ret = simple_write_to_buffer(msg, sizeof(msg), ppos, userbuf, count);
 	*ppos = 0; // always reset
 	if (ret < 0) {
 		dev_err(tdev->dev, "failed to copy msg data from userspace\n");
 		return ret;
 	}
-	print_hex_dump_bytes("mailbox send: ", DUMP_PREFIX_ADDRESS,
-			     msg, MBOX_MAX_MSG_LEN);
+	print_hex_dump_bytes("mailbox send: ", DUMP_PREFIX_ADDRESS, msg,
+			     sizeof(msg));
 
 	spin_lock_irqsave(&chan->lock, flags);
 	if (unlikely(IS_ERR_OR_NULL(chan->channel))) {
