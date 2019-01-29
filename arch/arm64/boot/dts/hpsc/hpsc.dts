@@ -24,12 +24,10 @@
 
 	aliases {
 		ethernet0 = &xgmac;
-		serial0 = &uart0;
 	};
 
 	chosen {
-		bootargs = "earlycon";
-		stdout-path = "serial0:115200n8";
+		bootargs = "earlycon=uart8250,mmio32,0xF92C0000,115200n8 console=ttyS0,115200n8";
 	};
 
         /* NOTE: memory { } nodes appended by u-boot from its device tree */
@@ -370,11 +368,14 @@
 		};
 
 		uart0: serial@f92c0000 {
-			compatible = "cdns,uart-r1p12", "xlnx,xuartps";
+			compatible = "ns16550a";
+			/* compatible = "snps,dw-apb-uart"; */ /* TODO: fails with unassigned access */
 			status = "okay";
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__HPPS_UART0_0 GIC_LVL_HI>;
 			reg = <0x0 0xf92c0000 0x0 0x1000>;
+			current-speed = <115200>;
+			reg-shift = <2>;
 			clocks = <&clk100 &clk100>;
 			clock-names = "uart_clk", "pclk";
 			power-domains = <&pd_uart0>;
