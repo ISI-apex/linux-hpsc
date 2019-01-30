@@ -39,13 +39,6 @@
 		#size-cells = <2>;
 		ranges;
 
-		/* TODO: is ATF resident? (my guess is, yes). If so, we must stay out of its region. */
-		/* NOTE: in Xilinx zcu102 default config, ATF resides in APU's
-		 * OCM, but Chiplet doesn't have that OCM, so we put ATF in HPPS DDR LOW */
-		atf {
-			reg = <0x0 0x80000000 0x0 0x100000>;
-		};
-
 		/* These shared memory regions cover the following range: */
 		/* reg = <0x0 0xbf800000 0x0 0x400000>; */
 		/* First part of the memory is for userspace */
