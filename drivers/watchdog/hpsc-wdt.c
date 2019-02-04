@@ -20,13 +20,16 @@
 #ifdef HPSC_WDT_USE_SW_TIMER
 #include <linux/jiffies.h>
 #include <linux/timer.h>
+#include <linux/hpsc_msg.h>
 static void hpsc_wdt_timeout(unsigned long data) {
 	module_put(THIS_MODULE);
 	pr_info("HPSC Watchdog Timer expired!\n");
+	hpsc_msg_wdt_timeout((unsigned int) data);
 	pr_crit("Initiating system reboot\n");
 	emergency_restart();
 	pr_crit("Reboot didn't ?????\n");
 }
+// TODO: hack - currently sharing one timer b/w instances
 static struct timer_list watchdog_ticktock =
 		TIMER_INITIALIZER(hpsc_wdt_timeout, 0, 0);
 #endif
