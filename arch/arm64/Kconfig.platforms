@@ -282,6 +282,11 @@ config ARCH_HPSC
 	bool "HPSC Chiplet"
 	imply HPSC_MBOX
 	imply HPSC_WDT
+	imply HPSC_RTI_TIMER
+	imply HPSC_MBOX_USERSPACE
+	imply HPSC_MBOX_KERNEL
+	imply HPSC_SHMEM
+	imply HPSC_KSHMEM
 	help
 	  This enables support for the HPSC Chiplet
 
