@@ -1917,7 +1917,7 @@ config UML_WATCHDOG
 
 # HPSC Architecture
 config HPSC_WDT
-	tristate "HPSC Chiplet watchdog support"
+	tristate "HPSC Chiplet hardware watchdog"
 	depends on ARCH_HPSC
 	select WATCHDOG_CORE
 	help
