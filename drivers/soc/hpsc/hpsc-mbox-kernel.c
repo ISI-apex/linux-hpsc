@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/mailbox_client.h>
 #include <linux/module.h>
+#include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include "hpsc_notif.h"
@@ -30,9 +31,9 @@ struct mbox_chan_dev {
 };
 
 struct mbox_client_dev {
-	struct mbox_chan_dev		chans[DT_MBOXES_COUNT];
-	struct hpsc_notif_handler	notif_h;
-	struct device			*dev;
+	struct mbox_chan_dev	chans[DT_MBOXES_COUNT];
+	struct notifier_block	nb;
+	struct device		*dev;
 };
 
 
@@ -51,7 +52,7 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 		print_hex_dump_bytes("rx_callback", DUMP_PREFIX_ADDRESS, msg,
 				     HPSC_MBOX_MSG_LEN);
 	} else {
-		hpsc_notif_recv(&cdev->tdev->notif_h, msg, HPSC_MBOX_MSG_LEN);
+		hpsc_notif_recv(msg, HPSC_MBOX_MSG_LEN);
 		// NOTE: yes, this is abuse of the method, but otherwise we need to
 		// add another method to the interface.
 		// Tell the controller to issue the ACK.
@@ -73,10 +74,11 @@ static void client_tx_done(struct mbox_client *cl, void *msg, int r)
 		dev_info(cl->dev, "tx_done: got ACK\n");
 }
 
-static int hpsc_mbox_kernel_send(struct hpsc_notif_handler *h, void *msg)
+static int hpsc_mbox_kernel_send(struct notifier_block *nb,
+				 unsigned long action, void *msg)
 {
 	// send message synchronously
-	struct mbox_client_dev *tdev = container_of(h, struct mbox_client_dev, notif_h);
+	struct mbox_client_dev *tdev = container_of(nb, struct mbox_client_dev, nb);
 	struct mbox_chan_dev *cdev = &tdev->chans[DT_MBOX_OUT];
 	int ret;
 	pr_info("HPSC mbox kernel: send\n");
@@ -128,13 +130,6 @@ static int hpsc_mbox_verify_chan_cfg(struct mbox_client_dev *tdev)
 	return 0;
 }
 
-static void hpsc_mbox_notif_handler_init(struct hpsc_notif_handler *h)
-{
-	h->type = HPSC_NOTIF_HANDLER_MAILBOX;
-	h->name = "HPSC In-kernel Mailbox Client";
-	h->send = hpsc_mbox_kernel_send;
-}
-
 static void hpsc_mbox_kernel_init(struct mbox_client *cl, struct device *dev)
 {
 	cl->dev = dev;
@@ -177,9 +172,6 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
 		hpsc_mbox_chan_dev_init(&tdev->chans[i], tdev);
 
-	// init notifier handler
-	hpsc_mbox_notif_handler_init(&tdev->notif_h);
-
 	// We must delay processing of pending messages until we've registered
 	// with notif handler, which requires all channels to be open.
 	// First, lock each channel before opening them
@@ -195,8 +187,10 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 		}
 	}
 	// Now register with notification handler
-	ret = hpsc_notif_handler_register(&tdev->notif_h);
-	BUG_ON(ret); // shouldn't fail if we setup notif_h correctly
+	tdev->nb.notifier_call = hpsc_mbox_kernel_send;
+	tdev->nb.priority = HPSC_NOTIF_PRIORITY_MAILBOX;
+	ret = hpsc_notif_register(&tdev->nb);
+	BUG_ON(ret); // we should be the only mailbox handler
 	// Finally, release the lock to start processing any pending messages
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
 		spin_unlock(&tdev->chans[i].lock);
@@ -204,7 +198,7 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "registered\n");
 #if 0
 	u8 msg[HPSC_MBOX_MSG_LEN] = { 0x1 };
-	ret = hpsc_mbox_kernel_send(&tdev->notif_h, msg);
+	ret = hpsc_mbox_kernel_send(&tdev->nb, 0, msg);
 	pr_info("hpsc_mbox_kernel_send: %d\n", ret);
 #endif
 	return 0;
@@ -225,7 +219,7 @@ static int hpsc_mbox_kernel_remove(struct platform_device *pdev)
 	struct mbox_client_dev *tdev = platform_get_drvdata(pdev);
 	dev_info(&pdev->dev, "remove\n");
 	// unregister with notification handler
-	hpsc_notif_handler_unregister(&tdev->notif_h);
+	hpsc_notif_unregister(&tdev->nb);
 	// close channels
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
 		mbox_free_channel(tdev->chans[i].channel);
