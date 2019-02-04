@@ -448,7 +448,19 @@ static struct platform_driver hpsc_mbox_driver = {
 	.probe		= hpsc_mbox_probe,
 	.remove		= hpsc_mbox_remove,
 };
-module_platform_driver(hpsc_mbox_driver);
+
+static int __init hpsc_mbox_init(void)
+{
+	return platform_driver_register(&hpsc_mbox_driver);
+}
+
+static void __exit hpsc_mbox_exit(void)
+{
+	platform_driver_unregister(&hpsc_mbox_driver);
+}
+// Can't use module_platform_driver() - must init before other platform drivers
+subsys_initcall(hpsc_mbox_init);
+module_exit(hpsc_mbox_exit);
 
 MODULE_DESCRIPTION("HPSC Chiplet mailbox driver");
 MODULE_AUTHOR("Alexei Colin <acolin@isi.edu>");
