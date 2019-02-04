@@ -99,9 +99,9 @@ config BCM2835_MBOX
 config HPSC_MBOX
 	tristate "HPSC Mailbox"
 	help
-	  An implementation of a mailbox that serves as a placeholder for
-	  the mailbox on the HPSC chiplet, until the mailbox IP is decided.
-	  This placeholder implementation is based on the BCM2835 Mailbox.
+	  An implementation of the HPSC Chiplet mailbox. Mailboxes are used for
+	  communication between Chiplet subsystems. Say Y here if you want to
+	  use the HPSC Chiplet mailbox.
 
 config STI_MBOX
 	tristate "STI Mailbox framework support"
