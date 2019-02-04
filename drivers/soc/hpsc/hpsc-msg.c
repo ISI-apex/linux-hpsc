@@ -1,7 +1,7 @@
-#include <linux/hpsc_msg.h>
-#include <linux/hpsc_notif.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include "hpsc_msg.h"
+#include "hpsc_notif.h"
 
 static int msg_send(enum hpsc_msg_type t, const void *payload, size_t psz)
 {
