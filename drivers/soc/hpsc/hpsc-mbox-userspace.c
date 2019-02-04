@@ -1,3 +1,7 @@
+/*
+ * HPSC userspace mailbox client.
+ * Provides device files for applications at /dev/mbox/<instance>/mbox<num>.
+ */
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -548,6 +552,7 @@ static struct platform_driver mbox_client_driver = {
 };
 module_platform_driver(mbox_client_driver);
 
-MODULE_DESCRIPTION("HPSC Mailbox client with interface to user-space");
-MODULE_AUTHOR("HPSC");
+MODULE_DESCRIPTION("HPSC mailbox userspace interface");
+MODULE_AUTHOR("Alexei Colin <acolin@isi.edu>");
+MODULE_AUTHOR("Connor Imes <cimes@isi.edu>");
 MODULE_LICENSE("GPL v2");
