@@ -78,7 +78,7 @@ static int hpsc_mbox_kernel_send(void *msg)
 	// send message synchronously
 	struct mbox_chan_dev *cdev;
 	int ret;
-	pr_info("Mailbox client kernel module: send\n");
+	pr_info("HPSC mbox kernel: send\n");
 	cdev = &mbox_chan_dev_ar[DT_MBOX_OUT];
 	spin_lock(&cdev->lock);
 	if (!cdev->send_ack) {
@@ -162,7 +162,7 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	int i;
 	int ret;
 
-	dev_info(&pdev->dev, "Mailbox client kernel module: probe\n");
+	dev_info(&pdev->dev, "probe\n");
 
 	// create/init client device
 	tdev = devm_kzalloc(&pdev->dev, sizeof(*tdev), GFP_KERNEL);
@@ -208,7 +208,7 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
 		spin_unlock(&mbox_chan_dev_ar[i].lock);
 
-	dev_info(&pdev->dev, "Mailbox client kernel module registered\n");
+	dev_info(&pdev->dev, "registered\n");
 #if 0
 	u8 msg[HPSC_MBOX_MSG_LEN] = { 0x1 };
 	ret = hpsc_mbox_kernel_send(msg);
@@ -229,14 +229,14 @@ fail_channel:
 static int hpsc_mbox_kernel_remove(struct platform_device *pdev)
 {
 	int i;
-	dev_info(&pdev->dev, "Mailbox client kernel module: remove\n");
+	dev_info(&pdev->dev, "remove\n");
 	// unregister with notification handler
 	hpsc_notif_handler_unregister(notif_h);
 	// close channels
 	for (i = 0; i < DT_MBOXES_COUNT; i++)
 		mbox_free_channel(mbox_chan_dev_ar[i].channel);
 	// mbox_chan_dev_ar and notif_h managed for us
-	dev_info(&pdev->dev, "Mailbox client kernel module unregistered\n");
+	dev_info(&pdev->dev, "unregistered\n");
 	return 0;
 }
 
