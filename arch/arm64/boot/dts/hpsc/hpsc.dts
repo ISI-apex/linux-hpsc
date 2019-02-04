@@ -413,9 +413,9 @@
 
 		mailbox_kernel {
 			compatible = "hpsc-mbox-client-kernel";
-			mboxes =  /* ip block, instance index, dir (1=incoming) */
-                                  <&hpps_mailbox  30  0  0  MASTER_ID_HPPS_CPU0>,
-                                  <&hpps_mailbox  31  1  0  MASTER_ID_HPPS_CPU0>;
+			mboxes =  /* ip block, intance index, dir, owner, dest */
+                                  <&hpps_mailbox  30  0  MASTER_ID_HPPS_CPU0  MASTER_ID_TRCH_CPU>,
+                                  <&hpps_mailbox  31  1  MASTER_ID_HPPS_CPU0  MASTER_ID_TRCH_CPU>;
 		};
 
 		hpps_dma: dma-controller@0xf92e0000 {
