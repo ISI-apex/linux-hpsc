@@ -396,7 +396,7 @@
 
 		mailbox_client_0 {
 			compatible = "hpsc-mbox-userspace";
-			mboxes =  /* ip block, intance index, dir, owner, dest */
+			mboxes =  /* ip block, intance index, dir, owner, src, dest */
 				    <&hpps_mailbox  MBOX_HPPS_HPPS_TRCH     0  0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
 				    <&hpps_mailbox  MBOX_HPPS_TRCH_HPPS     1  0                    MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>,
 				    <&hpps_mailbox  MBOX_HPPS_HPPS_RTPS     0  0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
@@ -415,7 +415,7 @@
 
 		mailbox_client_1 {
 			compatible = "hpsc-mbox-userspace";
-			mboxes =  /* ip block, intance index, dir, owner, dest */
+			mboxes =  /* ip block, intance index, dir, owner, src, dest */
 				    <&hpps_mailbox  6     0  0                    0 0>,
 				    <&hpps_mailbox  7     0  0                    0 0>,
 				    <&hpps_mailbox  8     0  0                    0 0>,
@@ -444,7 +444,7 @@
 
 		mailbox_kernel {
 			compatible = "hpsc-mbox-kernel";
-			mboxes =  /* ip block, intance index, dir, owner, dest */
+			mboxes =  /* ip block, intance index, dir, owner, src, dest */
                                   <&hpps_mailbox  MBOX_HPPS_HPPS_TRCH_SSW  0  0	MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
                                   <&hpps_mailbox  MBOX_HPPS_TRCH_HPPS_SSW  1  0	MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
 		};
