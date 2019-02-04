@@ -380,10 +380,10 @@
 			          <&hpps_mailbox  2  0>,
                                   <&hpps_mailbox  3  1>;
                         /* names optional, if not given, dev files named 'mbox%u' by index */
-			mbox-names = "trch_out",
-                                     "trch_in",
-                                     "rtps_out",
-                                     "rtps_in";
+			mbox-names = "mbox_trch_out",
+                                     "mbox_trch_in",
+                                     "mbox_rtps_out",
+                                     "mbox_rtps_in";
 		};
 
 		hpps_dma: dma-controller@0xf92e0000 {
