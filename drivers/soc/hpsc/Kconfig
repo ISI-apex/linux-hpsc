@@ -20,4 +20,13 @@ config HPSC_MBOX_KERNEL
 	  Y here if you want to enable in-kernel mailbox support for the HPSC
 	  Chiplet.
 
+config HPSC_SHMEM
+	tristate "HPSC Shared Memory Interface"
+	default y
+	depends on OF && OF_ADDRESS
+	help
+	  A device file interface to mmap shared memory with other HPSC
+	  Chiplet subsystems. Say Y here if you want to enable hpsc_shmem
+	  device files for use with mmap.
+
 endmenu
