@@ -1,11 +1,11 @@
 #include <linux/delay.h>
 #include <linux/err.h>
-#include <linux/hpsc_msg.h>
-#include <linux/hpsc_notif.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
+#include "hpsc_msg.h"
+#include "hpsc_notif.h"
 
 #define RETRIES_DEFAULT 10
 static unsigned int retries = RETRIES_DEFAULT;
