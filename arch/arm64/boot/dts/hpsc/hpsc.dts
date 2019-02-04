@@ -37,6 +37,7 @@
 	reserved-memory { /* TOOD: confirm that this is respected, also can/should this be in u-boot DT? */
 		#address-cells = <2>;
 		#size-cells = <2>;
+		ranges;
 
 		/* TODO: is ATF resident? (my guess is, yes). If so, we must stay out of its region. */
 		/* NOTE: in Xilinx zcu102 default config, ATF resides in APU's
@@ -44,6 +45,34 @@
 		atf {
 			reg = <0x0 0x80000000 0x0 0x100000>;
 		};
+
+		/* These shared memory regions cover the following range: */
+		/* reg = <0x0 0xbf800000 0x0 0x4000000>; */
+		shm_region0: buffer@0 {
+			reg = <0x0 0xbf800000 0x0 0x10000>;
+		};
+		shm_region1: buffer@1 {
+			reg = <0x0 0xbf810000 0x0 0x10000>;
+		};
+		shm_region2: buffer@2 {
+			reg = <0x0 0xbf820000 0x0 0x3FE0000>;
+		};
+	};
+
+	shm0 {
+		compatible = "hpsc-shmem";
+		region-name = "region0";
+		memory-region = <&shm_region0>;
+	};
+	shm1 {
+		compatible = "hpsc-shmem";
+		region-name = "region1";
+		memory-region = <&shm_region1>;
+	};
+	shm2 {
+		compatible = "hpsc-shmem";
+		region-name = "region2";
+		memory-region = <&shm_region2>;
 	};
 
 	cpus {
