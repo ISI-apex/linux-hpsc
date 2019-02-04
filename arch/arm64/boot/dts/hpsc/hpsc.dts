@@ -31,6 +31,10 @@
 #define GIC_LVL_HI 4
 #define GIC_LVL_LO 8
 
+/* Defined as a macro, since used in multiple places, because
+   the scope of this ID is private to a CPU */
+#define WDT_PPI_IRQ                      8
+
 / {
 	model = "HPSC";
 	compatible = "xlnx,zynqmp";
@@ -40,16 +44,6 @@
 	aliases {
 		ethernet0 = &xgmac;
 		serial0 = &uart0;
-		/* Note: watchdog0 currently reserved for softdog (default WDT for systemd to kick) */
-		/* SW can parse /sys/class/watchdog/watchdog[N]/ to distinguish between WDTs */
-		watchdog1 = &hpps_wdt0;
-		watchdog2 = &hpps_wdt1;
-		watchdog3 = &hpps_wdt2;
-		watchdog4 = &hpps_wdt3;
-		watchdog5 = &hpps_wdt4;
-		watchdog6 = &hpps_wdt5;
-		watchdog7 = &hpps_wdt6;
-		watchdog8 = &hpps_wdt7;
 	};
 
 	chosen {
@@ -519,44 +513,11 @@
 				    <&trch_mbox  31     0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
 		};
 
-		hpps_wdt0: wdt@F9240000 {
+		hpps_wdt: wdt@0xfff70000 {
 			compatible = "hpsc,hpsc-wdt";
-			reg = <0x0 0xF9240000 0x0 0x10000>;
-		};
-
-		hpps_wdt1: wdt@F9250000 {
-			compatible = "hpsc,hpsc-wdt";
-			reg = <0x0 0xF9250000 0x0 0x10000>;
-		};
-
-		hpps_wdt2: wdt@F9260000 {
-			compatible = "hpsc,hpsc-wdt";
-			reg = <0x0 0xF9260000 0x0 0x10000>;
-		};
-
-		hpps_wdt3: wdt@F9270000 {
-			compatible = "hpsc,hpsc-wdt";
-			reg = <0x0 0xF9270000 0x0 0x10000>;
-		};
-
-		hpps_wdt4: wdt@F9280000 {
-			compatible = "hpsc,hpsc-wdt";
-			reg = <0x0 0xF9280000 0x0 0x10000>;
-		};
-
-		hpps_wdt5: wdt@F9290000 {
-			compatible = "hpsc,hpsc-wdt";
-			reg = <0x0 0xF9290000 0x0 0x10000>;
-		};
-
-		hpps_wdt6: wdt@F92A0000 {
-			compatible = "hpsc,hpsc-wdt";
-			reg = <0x0 0xF92A0000 0x0 0x10000>;
-		};
-
-		hpps_wdt7: wdt@F92B0000 {
-			compatible = "hpsc,hpsc-wdt";
-			reg = <0x0 0xF92B0000 0x0 0x10000>;
+			reg = <0x0 0xfff70000 0x0 0x80000>;
+			interrupt-parent = <&gic>;
+			interrupts = <GIC_PPI WDT_PPI_IRQ GIC_LVL_HI>;
 		};
 
 		hpps_dma: dma-controller@0xf92e0000 {
