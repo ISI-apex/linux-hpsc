@@ -5,7 +5,6 @@
  * -kernel oops
  * -system lifecycle
  */
-#include <linux/hpsc_msg.h>
 #include <linux/kdebug.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -13,6 +12,7 @@
 #include <linux/reboot.h>
 #include <linux/watchdog.h>
 #include <linux/watchdog_pretimeout_notifier.h>
+#include "hpsc_msg.h"
 
 static int hpsc_monitor_shutdown(struct notifier_block *nb,
 				 unsigned long action, void *data)
