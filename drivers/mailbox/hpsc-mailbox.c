@@ -1,26 +1,3 @@
-/*
- *  Copyright (C) 2010,2015 Broadcom
- *  Copyright (C) 2013-2014 Lubomir Rintel
- *  Copyright (C) 2013 Craig McGeachie
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This device provides a mechanism for writing to the mailboxes,
- * that are shared between the ARM and the VideoCore processor
- *
- * Parts of the driver are based on:
- *  - arch/arm/mach-bcm2708/vcio.c file written by Gray Girling that was
- *    obtained from branch "rpi-3.6.y" of git://github.com/raspberrypi/
- *    linux.git
- *  - drivers/mailbox/bcm2835-ipc.c by Lubomir Rintel at
- *    https://github.com/hackerspace/rpi-linux/blob/lr-raspberry-pi/drivers/
- *    mailbox/bcm2835-ipc.c
- *  - documentation available on the following web site:
- *    https://github.com/raspberrypi/firmware/wiki/Mailbox-property-interface
- */
-
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
@@ -34,140 +11,240 @@
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 
-/* Mailboxes */
-#if 0 // Offsets in QEMU model are off by 0x80 for some reason
-#define ARM_0_MAIL0	0x00
-#define ARM_0_MAIL1	0x20
-#else
-#define ARM_0_MAIL0	0x80
-#define ARM_0_MAIL1	0xA0
-#endif
+#define REG_OWNER             0x00
+#define REG_INT_ENABLE        0x04
+#define REG_INT_CAUSE         0x08
+#define REG_INT_STATUS        0x0C
+#define REG_INT_CLEAR         0x08 /* TODO: is this overlap by design */
+#define REG_INT_SET           0x0C
+#define REG_DESTINATION       0x1C
+#define REG_DATA              0x20
 
-/*
- * Mailbox registers. We basically only support mailbox 0 & 1. We
- * deliver to the VC in mailbox 1, it delivers to us in mailbox 0. See
- * BCM2835-ARM-Peripherals.pdf section 1.3 for an explanation about
- * the placement of memory barriers.
- */
-#define MAIL0_RD	(ARM_0_MAIL0 + 0x00)
-#define MAIL0_POL	(ARM_0_MAIL0 + 0x10)
-#define MAIL0_STA	(ARM_0_MAIL0 + 0x18)
-#define MAIL0_CNF	(ARM_0_MAIL0 + 0x1C)
-#define MAIL1_RD	(ARM_0_MAIL1 + 0x00)
-#define MAIL1_WRT	(ARM_0_MAIL1 + 0x00)
-#define MAIL1_STA	(ARM_0_MAIL1 + 0x18)
-#define MAIL1_CNF	(ARM_0_MAIL1 + 0x1C)
+#define HPSC_MBOX_INT_A 0x1 // in our req-reply usage model, signifies request
+#define HPSC_MBOX_INT_B 0x2 // in our req-reply usage model, signifies reply
 
-/* Status register: FIFO state. */
-#define ARM_MS_FULL		BIT(31)
-#define ARM_MS_EMPTY		BIT(30)
+#define HPSC_MBOX_DATA_REGS 16
+#define HPSC_MBOX_INTS 2
+#define HPSC_MBOX_INSTANCES 32
+#define HPSC_MBOX_INSTANCE_REGION (REG_DATA + HPSC_MBOX_DATA_REGS * 4)
 
-/* Configuration register: Enable interrupts. */
-#define ARM_MC_IHAVEDATAIRQEN	BIT(0)
-
-struct bcm2835_mbox {
+struct hpsc_mbox {
 	void __iomem *regs;
-	spinlock_t lock;
+	//spinlock_t lock; // TODO: should not be necessary, because can't access same device file from two cores
 	struct mbox_controller controller;
 };
 
-static struct bcm2835_mbox *bcm2835_link_mbox(struct mbox_chan *link)
+struct hpsc_mbox_chan {
+        struct hpsc_mbox *mbox;
+	void __iomem *regs;
+        unsigned instance;
+        bool incoming;
+        unsigned rcv_irqnum;
+        unsigned ack_irqnum;
+#if 0
+        unsigned long owner;
+        unsigned long destination;
+#endif
+        unsigned int_enabled;
+};
+
+static struct hpsc_mbox *hpsc_mbox_link_mbox(struct mbox_chan *link)
 {
-	return container_of(link->mbox, struct bcm2835_mbox, controller);
+	return container_of(link->mbox, struct hpsc_mbox, controller);
 }
 
-static irqreturn_t bcm2835_mbox_irq(int irq, void *dev_id)
+static irqreturn_t hpsc_mbox_rcv_irq(int irq, void *dev_id)
 {
-	struct bcm2835_mbox *mbox = dev_id;
-	struct device *dev = mbox->controller.dev;
-	struct mbox_chan *link = &mbox->controller.chans[0];
+	struct mbox_chan *link = dev_id;
+	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
+	struct hpsc_mbox_chan *chan = link->con_priv;
 
-	while (!(readl(mbox->regs + MAIL0_STA) & ARM_MS_EMPTY)) {
-		u32 msg = readl(mbox->regs + MAIL0_RD);
-		dev_dbg(dev, "Reply 0x%08X\n", msg);
-		mbox_chan_received_data(link, &msg);
-	}
+        dev_dbg(mbox->controller.dev, "rcv ISR instance %u\n", chan->instance);
+
+        mbox_chan_received_data(link, chan->regs + REG_DATA); // TODO: can client memcpy_fromio?
+
+        dev_dbg(mbox->controller.dev, "clear int A\n");
+        writel(HPSC_MBOX_INT_A, chan->regs + REG_INT_CLEAR);
+
+        // TOOD: either ackowledge now, or add an ack() method to the mailbox API,
+        // for the client to call when it can accept
+        dev_dbg(mbox->controller.dev, "set int B\n");
+        writel(HPSC_MBOX_INT_B, chan->regs + REG_INT_SET);
+
 	return IRQ_HANDLED;
 }
 
-static int bcm2835_send_data(struct mbox_chan *link, void *data)
+static irqreturn_t hpsc_mbox_ack_irq(int irq, void *dev_id)
 {
-	struct bcm2835_mbox *mbox = bcm2835_link_mbox(link);
-	u32 msg = *(u32 *)data;
+	struct mbox_chan *link = dev_id;
+	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
+	struct hpsc_mbox_chan *chan = link->con_priv;
 
-	spin_lock(&mbox->lock);
-	writel(msg, mbox->regs + MAIL1_WRT);
-	dev_dbg(mbox->controller.dev, "Request 0x%08X\n", msg);
-	spin_unlock(&mbox->lock);
+        dev_dbg(mbox->controller.dev, "ack ISR instance %u\n", chan->instance);
+
+        dev_dbg(mbox->controller.dev, "clear int B\n");
+        writel(HPSC_MBOX_INT_B, chan->regs + REG_INT_CLEAR);
+
+        mbox_chan_txdone(link, /* status = OK */ 0);
+
+	return IRQ_HANDLED;
+}
+
+static int hpsc_mbox_send_data(struct mbox_chan *link, void *data)
+{
+	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
+	struct hpsc_mbox_chan *chan = link->con_priv;
+        unsigned i;
+	u32 *msg = (u32 *)data;
+
+	//spin_lock(&mbox->lock);
+	dev_dbg(mbox->controller.dev, "send: ");
+        for (i = 0; i < HPSC_MBOX_DATA_REGS; ++i) {
+	        writel(msg[i], chan->regs + REG_DATA + i * 4);
+	        dev_dbg(mbox->controller.dev, "%08X ", msg[i]);
+        }
+	dev_dbg(mbox->controller.dev, "\n");
+
+	dev_dbg(mbox->controller.dev, "set int A\n");
+	writel(HPSC_MBOX_INT_A, chan->regs + REG_INT_SET);
+
+	//spin_unlock(&mbox->lock);
 	return 0;
 }
 
-static int bcm2835_startup(struct mbox_chan *link)
+static int hpsc_mbox_startup(struct mbox_chan *link)
 {
-	struct bcm2835_mbox *mbox = bcm2835_link_mbox(link);
+	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
+	struct hpsc_mbox_chan *chan = link->con_priv;
+        u32 val;
 
-	/* Enable the interrupt on data reception */
-	writel(ARM_MC_IHAVEDATAIRQEN, mbox->regs + MAIL0_CNF);
+        // TODO: can this also race with ISR? race through client API?
+
+        // Alternatively, could also take properies from mbox_client, but
+        // that means modifying the common mbox interface
+
+        if (chan->incoming) {
+            // TODO: check readl(mbox->regs + REG_DESTINATION) == self_bus_id()
+
+            enable_irq(chan->rcv_irqnum);
+
+            // should be allowed because we should be the destination
+	    dev_dbg(mbox->controller.dev, "enable int A (rcv)\n");
+
+            val = readl(chan->regs + REG_INT_ENABLE);
+            writel(val | HPSC_MBOX_INT_A, chan->regs + REG_INT_ENABLE);
+
+        } else { // TX
+
+#if 0
+            // Even though owner/destination is fixed per boot (specified in
+            // device tree node for the mailbox client), we have to claim here,
+            // instead of somewhere once on boot, because the IP will remain
+            // powered if owner is assigned.
+	    dev_dbg(mbox->controller.dev, "set owner: %lx\n", chan_state->owner);
+            writel(chan_state->owner, mbox->regs + REG_OWNER);
+            owner = readl(mbox->regs + REG_OWNER);
+            if (owner != chan_state->owner) {
+                if (owner) {
+                    dev_err(mbox->controller.dev, "failed to claim mailbox for %lx: "
+                                                  "already owned by %lx\n",
+                            chan_state->owner, owner);
+                } else {
+                    dev_err(mbox->controller.dev, "failed to claim mailbox for busid %lx: "
+                                                  "not running on cpu with that busid\n",
+                              chan_state->owner);
+                }
+                return -EBUSY;
+            }
+
+	    dev_dbg(mbox->controller.dev, "set destination: %lu\n", chan_state->destination);
+            writel(chan_state->destination, mbox->regs + REG_DESTINATION);
+#endif
+
+            enable_irq(chan->ack_irqnum);
+
+	    dev_dbg(mbox->controller.dev, "enable int B (ack)\n");
+            val = readl(chan->regs + REG_INT_ENABLE);
+            writel(val | HPSC_MBOX_INT_B, chan->regs + REG_INT_ENABLE);
+        }
 
 	return 0;
 }
 
-static void bcm2835_shutdown(struct mbox_chan *link)
+static void hpsc_mbox_shutdown(struct mbox_chan *link)
 {
-	struct bcm2835_mbox *mbox = bcm2835_link_mbox(link);
+	struct hpsc_mbox *mbox = hpsc_mbox_link_mbox(link);
+	struct hpsc_mbox_chan *chan = link->con_priv;
 
-	writel(0, mbox->regs + MAIL0_CNF);
+        // TODO: race with ISR. Also, cace through client API?
+
+        u32 ie = readl(chan->regs + REG_INT_ENABLE);
+
+        if (chan->incoming) {
+	    dev_dbg(mbox->controller.dev, "disable int A (rcv)\n");
+            writel(ie & ~HPSC_MBOX_INT_A, chan->regs + REG_INT_ENABLE);
+
+            disable_irq(chan->rcv_irqnum);
+
+        } else { // TX
+	    dev_dbg(mbox->controller.dev, "disable int B (ack)\n");
+            writel(ie & ~HPSC_MBOX_INT_B, chan->regs + REG_INT_ENABLE);
+
+            disable_irq(chan->ack_irqnum);
+
+#if 0
+	    dev_dbg(mbox->controller.dev, "clear destination\n");
+            writel(0, mbox->regs + REG_DESTINATION);
+	    dev_dbg(mbox->controller.dev, "clear owner\n");
+            writel(0, mbox->regs + REG_OWNER);
+#endif
+        }
 }
 
-static bool bcm2835_last_tx_done(struct mbox_chan *link)
-{
-	struct bcm2835_mbox *mbox = bcm2835_link_mbox(link);
-	bool ret;
-
-	spin_lock(&mbox->lock);
-	ret = !(readl(mbox->regs + MAIL1_STA) & ARM_MS_FULL);
-	spin_unlock(&mbox->lock);
-	return ret;
-}
-
-static const struct mbox_chan_ops bcm2835_mbox_chan_ops = {
-	.send_data	= bcm2835_send_data,
-	.startup	= bcm2835_startup,
-	.shutdown	= bcm2835_shutdown,
-	.last_tx_done	= bcm2835_last_tx_done
+static const struct mbox_chan_ops hpsc_mbox_chan_ops = {
+	.send_data	= hpsc_mbox_send_data,
+	.startup	= hpsc_mbox_startup,
+	.shutdown	= hpsc_mbox_shutdown,
 };
 
-static struct mbox_chan *bcm2835_mbox_index_xlate(struct mbox_controller *mbox,
-		    const struct of_phandle_args *sp)
+/* Parse the channel identifiers from client's device tree node */
+static struct mbox_chan *hpsc_mbox_of_xlate(struct mbox_controller *mbox,
+                                            const struct of_phandle_args *sp)
 {
-	if (sp->args_count != 0)
-		return NULL;
+       struct mbox_chan *link;
+       struct hpsc_mbox_chan *chan;
 
-	return &mbox->chans[0];
+       if (sp->args_count != 2) {
+	       dev_err(mbox->dev, "invalid mailbox instance reference in DT node\n");
+               return NULL;
+        }
+
+       link = &mbox->chans[sp->args[0]];
+
+       // Slightly not nice, since adding side-effects to an otherwise pure function
+       chan = (struct hpsc_mbox_chan *)link->con_priv;
+       chan->incoming = sp->args[1];
+#if 0
+       chan->owner = sp->args[2];
+       chan->destination = sp->args[3];
+#endif
+
+       return link;
 }
 
-static int bcm2835_mbox_probe(struct platform_device *pdev)
+static int hpsc_mbox_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	int ret = 0;
 	struct resource *iomem;
-	struct bcm2835_mbox *mbox;
-	int irqnum;
+	struct hpsc_mbox *mbox;
+        struct hpsc_mbox_chan *con_priv, *chan;
+        unsigned i;
 
 	mbox = devm_kzalloc(dev, sizeof(*mbox), GFP_KERNEL);
 	if (mbox == NULL)
 		return -ENOMEM;
-	spin_lock_init(&mbox->lock);
-
-	irqnum = irq_of_parse_and_map(dev->of_node, 0);
-	dev_info(dev, "bcm2835_mbox_probe: irq %u\n", irqnum);
-	ret = devm_request_irq(dev, irqnum,
-			       bcm2835_mbox_irq, 0, dev_name(dev), mbox);
-	if (ret) {
-		dev_err(dev, "Failed to register a mailbox IRQ handler: %d\n",
-			ret);
-		return -ENODEV;
-	}
+	//spin_lock_init(&mbox->lock);
 
 	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	mbox->regs = devm_ioremap_resource(&pdev->dev, iomem);
@@ -177,16 +254,52 @@ static int bcm2835_mbox_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	mbox->controller.txdone_poll = true;
-	mbox->controller.txpoll_period = 5;
-	mbox->controller.ops = &bcm2835_mbox_chan_ops;
-	mbox->controller.of_xlate = &bcm2835_mbox_index_xlate;
+	mbox->controller.txdone_irq = true;
+	mbox->controller.ops = &hpsc_mbox_chan_ops;
+        mbox->controller.of_xlate = &hpsc_mbox_of_xlate;
 	mbox->controller.dev = dev;
-	mbox->controller.num_chans = 1;
+	mbox->controller.num_chans = HPSC_MBOX_INSTANCES;
 	mbox->controller.chans = devm_kzalloc(dev,
-		sizeof(*mbox->controller.chans), GFP_KERNEL);
+		sizeof(*mbox->controller.chans) * HPSC_MBOX_INSTANCES, GFP_KERNEL);
 	if (!mbox->controller.chans)
 		return -ENOMEM;
+
+        // Allocate space for private state as a contiguous array, to reduce overhead.
+        // Note: could also allocate on demand, but let's trade-off some memory for efficiency.
+        con_priv = devm_kzalloc(dev,
+                    sizeof(struct hpsc_mbox_chan) * mbox->controller.num_chans, GFP_KERNEL);
+        if (!con_priv)
+                return -ENOMEM;
+        for (i = 0; i < mbox->controller.num_chans; ++i) {
+                chan = &con_priv[i];
+
+                chan->rcv_irqnum = irq_of_parse_and_map(dev->of_node, 2 * i);
+                dev_info(dev, "hpsc_mbox_probe: rcv irq %u\n", chan->rcv_irqnum);
+                ret = devm_request_irq(dev, chan->rcv_irqnum,
+                                       hpsc_mbox_rcv_irq, 0, dev_name(dev), &mbox->controller.chans[i]);
+                disable_irq(chan->rcv_irqnum); // TODO: is there a way to request in disable state?
+                if (ret) {
+                        dev_err(dev, "Failed to register mailbox rcv IRQ handler: %d\n",
+                                ret);
+                        return -ENODEV;
+                }
+
+                chan->ack_irqnum = irq_of_parse_and_map(dev->of_node, 2 * i + 1);
+                dev_info(dev, "hpsc_mbox_probe: ack irq %u\n", chan->ack_irqnum);
+                ret = devm_request_irq(dev, chan->ack_irqnum,
+                                       hpsc_mbox_ack_irq, 0, dev_name(dev), &mbox->controller.chans[i]);
+                disable_irq(chan->ack_irqnum); // TODO: is there a way to request in disable state?
+                if (ret) {
+                        dev_err(dev, "Failed to register mailbox ack IRQ handler: %d\n",
+                                ret);
+                        return -ENODEV;
+                }
+
+                chan->mbox = mbox;
+                chan->instance = i;
+                chan->regs = mbox->regs + i * HPSC_MBOX_INSTANCE_REGION;
+                mbox->controller.chans[i].con_priv = &con_priv[i];
+        }
 
 	ret = mbox_controller_register(&mbox->controller);
 	if (ret)
@@ -199,29 +312,29 @@ static int bcm2835_mbox_probe(struct platform_device *pdev)
 	return ret;
 }
 
-static int bcm2835_mbox_remove(struct platform_device *pdev)
+static int hpsc_mbox_remove(struct platform_device *pdev)
 {
-	struct bcm2835_mbox *mbox = platform_get_drvdata(pdev);
+	struct hpsc_mbox *mbox = platform_get_drvdata(pdev);
 	mbox_controller_unregister(&mbox->controller);
 	return 0;
 }
 
-static const struct of_device_id bcm2835_mbox_of_match[] = {
+static const struct of_device_id hpsc_mbox_of_match[] = {
 	{ .compatible = "hpsc,hpsc-mbox", },
 	{},
 };
-MODULE_DEVICE_TABLE(of, bcm2835_mbox_of_match);
+MODULE_DEVICE_TABLE(of, hpsc_mbox_of_match);
 
-static struct platform_driver bcm2835_mbox_driver = {
+static struct platform_driver hpsc_mbox_driver = {
 	.driver = {
 		.name = "hpsc_mbox",
-		.of_match_table = bcm2835_mbox_of_match,
+		.of_match_table = hpsc_mbox_of_match,
 	},
-	.probe		= bcm2835_mbox_probe,
-	.remove		= bcm2835_mbox_remove,
+	.probe		= hpsc_mbox_probe,
+	.remove		= hpsc_mbox_remove,
 };
-module_platform_driver(bcm2835_mbox_driver);
+module_platform_driver(hpsc_mbox_driver);
 
 MODULE_AUTHOR("HPSC");
-MODULE_DESCRIPTION("Placeholder mailbox for HPSC chiplet (based on BCM2835 mailbox)");
+MODULE_DESCRIPTION("Mailbox for HPSC chiplet");
 MODULE_LICENSE("GPL v2");
