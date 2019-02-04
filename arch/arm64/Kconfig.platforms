@@ -278,4 +278,9 @@ config ARCH_ZYNQMP
 	help
 	  This enables support for Xilinx ZynqMP Family
 
+config ARCH_HPSC
+	bool "HPSC Chiplet"
+	help
+	  This enables support for the HPSC Chiplet
+
 endmenu
