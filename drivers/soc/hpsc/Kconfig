@@ -29,4 +29,13 @@ config HPSC_SHMEM
 	  Chiplet subsystems. Say Y here if you want to enable hpsc_shmem
 	  device files for use with mmap.
 
+config HPSC_KSHMEM
+	tristate "HPSC Shared Memory In-kernel Interface"
+	default y
+	depends on OF && OF_ADDRESS
+	help
+	  A shared memory interface for in-kernel message exchange with other
+	  HPSC subsystems. Say Y here if you want to enable in-kernel shared
+	  memory support for the HPSC Chiplet.
+
 endmenu
