@@ -255,6 +255,7 @@ static struct platform_driver hpsc_mbox_client_kernel_driver = {
 };
 module_platform_driver(hpsc_mbox_client_kernel_driver);
 
-MODULE_DESCRIPTION("HPSC Mailbox client for in-kernel use");
-MODULE_AUTHOR("HPSC");
+MODULE_DESCRIPTION("HPSC mailbox in-kernel interface");
+MODULE_AUTHOR("Connor Imes <cimes@isi.edu>");
+MODULE_AUTHOR("Alexei Colin <acolin@isi.edu>");
 MODULE_LICENSE("GPL v2");
