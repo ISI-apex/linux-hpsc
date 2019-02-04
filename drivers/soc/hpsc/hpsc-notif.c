@@ -23,16 +23,28 @@ MODULE_PARM_DESC(retries,
 static ATOMIC_NOTIFIER_HEAD(notif_handlers);
 
 
+static const char* to_handler_name(int priority) {
+	switch (priority) {
+	case HPSC_NOTIF_PRIORITY_SHMEM:
+		return "shmem";
+	case HPSC_NOTIF_PRIORITY_MAILBOX:
+		return "mailbox";
+	}
+	return "UNKNOWN";
+}
+
 int hpsc_notif_register(struct notifier_block *nb)
 {
-	pr_info("hpsc-notif: registering handler type: %d\n", nb->priority);
+	pr_info("hpsc-notif: registering handler type: %d (%s)\n",
+		nb->priority, to_handler_name(nb->priority));
 	return atomic_notifier_chain_register(&notif_handlers, nb);
 }
 EXPORT_SYMBOL_GPL(hpsc_notif_register);
 
 int hpsc_notif_unregister(struct notifier_block *nb)
 {
-	pr_info("hpsc-notif: unregistering handler type: %d\n", nb->priority);
+	pr_info("hpsc-notif: unregistering handler type: %d (%s)\n",
+		nb->priority, to_handler_name(nb->priority));
 	return atomic_notifier_chain_unregister(&notif_handlers, nb);
 }
 EXPORT_SYMBOL_GPL(hpsc_notif_unregister);

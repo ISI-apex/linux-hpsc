@@ -15,7 +15,11 @@
 
 #include <linux/notifier.h>
 
+/**
+ * Higher-priority notifiers are attempted first
+ */
 enum hpsc_notif_priority {
+	HPSC_NOTIF_PRIORITY_SHMEM,
 	HPSC_NOTIF_PRIORITY_MAILBOX
 };
 
