@@ -12,49 +12,39 @@
 #ifndef __HPSC_NOTIF_H
 #define __HPSC_NOTIF_H
 
-enum hpsc_notif_handler_type {
-	HPSC_NOTIF_HANDLER_MAILBOX,
-	HPSC_NOTIF_HANDLER_COUNT
+#include <linux/notifier.h>
+
+enum hpsc_notif_priority {
+	HPSC_NOTIF_PRIORITY_MAILBOX,
+	HPSC_NOTIF_PRIORITY_COUNT
 };
 
 /**
- * Handlers are registered by modules that can exchange messages.
- * They are usually configured through the device tree.
+ * Register a notifier handler.
+ * The notifier_block's priority must be set using hpsc_notif_priority.
+ * There can be only one of each priority at a time.
  *
- * @type:   The handler type - only one of each is allowed to be registered
- * @name:   A unique identifier for debugging
- * @send:   A function pointer for sending data using this handler
- */
-struct hpsc_notif_handler {
-	enum hpsc_notif_handler_type type;
-	const char* name;
-	int (*send)(struct hpsc_notif_handler *h, void *msg);
-};
-
-/**
- * Used by handlers to register themselves.
- *
- * @param h The handler
+ * @param nb The notifier block
  * @return 0 on success, a negative error code otherwise
  */
-int hpsc_notif_handler_register(struct hpsc_notif_handler *h);
+int hpsc_notif_register(struct notifier_block *nb);
 
 /**
- * Used by handlers to unregister themselves.
+ * Unregister a notifier handler.
+ * The notifier_block's priority must be set using hpsc_notif_priority.
  *
- * @param h The registered handler
+ * @param nb The notifier block
  */
-void hpsc_notif_handler_unregister(struct hpsc_notif_handler *h);
+void hpsc_notif_unregister(struct notifier_block *nb);
 
 /**
  * Called by handlers when they receive messages.
  *
- * @param h The registered handler
  * @param msg The message
  * @param sz Message size, currently must be HPSC_MSG_SIZE
  * @return 0 on success, a negative error code otherwise
  */
-int hpsc_notif_recv(struct hpsc_notif_handler *h, void *msg, size_t sz);
+int hpsc_notif_recv(const void *msg, size_t sz);
 
 /**
  * Send a message to the Chiplet manager.
