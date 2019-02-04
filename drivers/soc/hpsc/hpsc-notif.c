@@ -188,7 +188,7 @@ static void __exit hpsc_notif_exit(void) {
 }
 
 MODULE_DESCRIPTION("HPSC Notification module");
-MODULE_AUTHOR("HPSC");
+MODULE_AUTHOR("Connor Imes <cimes@isi.edu>");
 MODULE_LICENSE("GPL v2");
 
 module_init(hpsc_notif_init);
