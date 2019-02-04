@@ -394,7 +394,7 @@
                                           if owner and, dest reg is set to this value) */
 		};
 
-		mailbox_client {
+		mailbox_client_0 {
 			compatible = "mailbox-client-userspace";
 			mboxes =  /* ip block, intance index, dir, owner, dest */
 				    <&hpps_mailbox  MBOX_HPPS_HPPS_TRCH     0  0                    MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
@@ -411,6 +411,35 @@
                                      "mbox_rtps_in",
                                      "mbox_own_trch_out",
                                      "mbox_own_trch_in";
+		};
+
+		mailbox_client_1 {
+			compatible = "mailbox-client-userspace";
+			mboxes =  /* ip block, intance index, dir, owner, dest */
+				    <&hpps_mailbox  6     0  0                    0 0>,
+				    <&hpps_mailbox  7     0  0                    0 0>,
+				    <&hpps_mailbox  8     0  0                    0 0>,
+				    <&hpps_mailbox  9     0  0                    0 0>,
+				    <&hpps_mailbox  10     0  0                    0 0>,
+				    <&hpps_mailbox  11     0  0                    0 0>,
+				    <&hpps_mailbox  12     0  0                    0 0>,
+				    <&hpps_mailbox  13     0  0                    0 0>,
+				    <&hpps_mailbox  14     0  0                    0 0>,
+				    <&hpps_mailbox  15     0  0                    0 0>,
+				    <&hpps_mailbox  16     0  0                    0 0>,
+				    <&hpps_mailbox  17     0  0                    0 0>,
+				    <&hpps_mailbox  18     0  0                    0 0>,
+				    <&hpps_mailbox  19     0  0                    0 0>,
+				    <&hpps_mailbox  20     0  0                    0 0>,
+				    <&hpps_mailbox  21     0  0                    0 0>,
+				    <&hpps_mailbox  22     0  0                    0 0>,
+				    <&hpps_mailbox  23     0  0                    0 0>,
+				    <&hpps_mailbox  24     0  0                    0 0>,
+				    <&hpps_mailbox  25     0  0                    0 0>,
+				    <&hpps_mailbox  26     0  0                    0 0>,
+				    <&hpps_mailbox  27     0  0                    0 0>,
+				    <&hpps_mailbox  28     0  0                    0 0>,
+				    <&hpps_mailbox  29     0  0                    0 0>;
 		};
 
 		mailbox_kernel {
