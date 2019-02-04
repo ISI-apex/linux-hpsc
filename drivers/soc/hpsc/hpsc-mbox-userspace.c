@@ -163,7 +163,6 @@ static int mbox_open(struct inode *inodep, struct file *filp)
 		goto out;
 	}
 
-	dev_dbg(tdev->dev, "mbox_chan_dev: %p\n", mbox_chan_dev);
 	mbox_chan_dev->channel = mbox_request_channel(&mbox_chan_dev->client,
 						      mbox_chan_dev->instance_idx);
 	if (IS_ERR(mbox_chan_dev->channel)) {
@@ -297,7 +296,7 @@ static unsigned int mbox_poll(struct file *filp, poll_table *wait)
 	struct mbox_chan_dev *mbox_chan_dev = filp->private_data;
         unsigned int rc = 0;
 
-        dev_err(mbox_chan_dev->tdev->dev, "poll\n");
+        dev_info(mbox_chan_dev->tdev->dev, "poll\n");
 
         poll_wait(filp, &mbox_chan_dev->wq, wait);
 
@@ -306,7 +305,7 @@ static unsigned int mbox_poll(struct file *filp, poll_table *wait)
         if (!mbox_chan_dev->send_ack)
                 rc |= POLLOUT | POLLWRNORM;
 
-        dev_err(mbox_chan_dev->tdev->dev, "poll ret: %d\n", rc);
+        dev_info(mbox_chan_dev->tdev->dev, "poll ret: %d\n", rc);
         return rc;
 }
 
@@ -498,7 +497,7 @@ static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
 	if (ret)
 		goto fail_init;
 
-	dev_info(&pdev->dev, "Successfully registered\n");
+	dev_info(&pdev->dev, "registered\n");
 	return 0;
 fail_init:
 	kfree(tdev);
@@ -533,7 +532,7 @@ static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
 	}
 	mutex_unlock(&class_mutex);
 
-	dev_info(&pdev->dev, "Successfully unregistered\n");
+	dev_info(&pdev->dev, "unregistered\n");
 	return 0;
 }
 
