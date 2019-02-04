@@ -1,0 +1,4 @@
+menu "HPSC Chiplet SoC drivers"
+	depends on ARCH_HPSC
+
+endmenu
