@@ -464,7 +464,7 @@ fail:
 
 }
 
-static int mbox_client_probe(struct platform_device *pdev)
+static int hpsc_mbox_userspace_probe(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev;
 	int ret;
@@ -511,7 +511,7 @@ fail_dev:
 	return ret;
 }
 
-static int mbox_client_remove(struct platform_device *pdev)
+static int hpsc_mbox_userspace_remove(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev = platform_get_drvdata(pdev);
 	int i;
@@ -537,20 +537,20 @@ static int mbox_client_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id mbox_client_match[] = {
-	{ .compatible = "mailbox-client-userspace" },
+static const struct of_device_id hpsc_mbox_userspace_match[] = {
+	{ .compatible = "hpsc-mbox-userspace" },
 	{},
 };
 
-static struct platform_driver mbox_client_driver = {
+static struct platform_driver hpsc_mbox_userspace_driver = {
 	.driver = {
-		.name = "mailbox_client_userspace",
-		.of_match_table = mbox_client_match,
+		.name = "hpsc_mbox_userspace",
+		.of_match_table = hpsc_mbox_userspace_match,
 	},
-	.probe  = mbox_client_probe,
-	.remove = mbox_client_remove,
+	.probe  = hpsc_mbox_userspace_probe,
+	.remove = hpsc_mbox_userspace_remove,
 };
-module_platform_driver(mbox_client_driver);
+module_platform_driver(hpsc_mbox_userspace_driver);
 
 MODULE_DESCRIPTION("HPSC mailbox userspace interface");
 MODULE_AUTHOR("Alexei Colin <acolin@isi.edu>");
