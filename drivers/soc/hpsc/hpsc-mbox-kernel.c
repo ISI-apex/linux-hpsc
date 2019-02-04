@@ -18,7 +18,7 @@
 #define DT_MBOXES_COUNT	2
 #define DT_MBOXES_CELLS	"#mbox-cells"
 
-#define HPSC_MBOX_CLIENT_KERNEL_MSG_LEN 64
+#define HPSC_MBOX_MSG_LEN 64
 
 struct mbox_client_dev {
 	struct device *dev;
@@ -49,9 +49,9 @@ static void client_rx_callback(struct mbox_client *cl, void *msg)
 		// Dump the message, but don't ACK it
 		dev_err(cl->dev, "Pending message cannot be processed!\n");
 		print_hex_dump_bytes("rx_callback", DUMP_PREFIX_ADDRESS, msg,
-				     HPSC_MBOX_CLIENT_KERNEL_MSG_LEN);
+				     HPSC_MBOX_MSG_LEN);
 	} else {
-		hpsc_notif_recv(notif_h, msg, HPSC_MBOX_CLIENT_KERNEL_MSG_LEN);
+		hpsc_notif_recv(notif_h, msg, HPSC_MBOX_MSG_LEN);
 		// NOTE: yes, this is abuse of the method, but otherwise we need to
 		// add another method to the interface.
 		// Tell the controller to issue the ACK.
@@ -73,7 +73,7 @@ static void client_tx_done(struct mbox_client *cl, void *msg, int r)
 		dev_info(cl->dev, "tx_done: got ACK\n");
 }
 
-static int hpsc_mbox_client_kernel_send(void *msg)
+static int hpsc_mbox_kernel_send(void *msg)
 {
 	// send message synchronously
 	struct mbox_chan_dev *cdev;
@@ -132,11 +132,11 @@ static int hpsc_mbox_verify_chan_cfg(struct mbox_client_dev *tdev)
 static void hpsc_mbox_notif_handler_init(struct hpsc_notif_handler *h)
 {
 	h->type = HPSC_NOTIF_HANDLER_MAILBOX;
-	h->name = "HPSC Mailbox Client Kernel";
-	h->send = hpsc_mbox_client_kernel_send;
+	h->name = "HPSC In-kernel Mailbox Client";
+	h->send = hpsc_mbox_kernel_send;
 }
 
-static void hpsc_mbox_client_init(struct mbox_client *cl, struct device *dev)
+static void hpsc_mbox_kernel_init(struct mbox_client *cl, struct device *dev)
 {
 	cl->dev = dev;
 	cl->rx_callback = client_rx_callback;
@@ -149,13 +149,13 @@ static void hpsc_mbox_chan_dev_init(struct mbox_chan_dev *cdev,
 				    struct mbox_client_dev *tdev)
 {
 	cdev->tdev = tdev;
-	hpsc_mbox_client_init(&cdev->client, tdev->dev);
+	hpsc_mbox_kernel_init(&cdev->client, tdev->dev);
 	spin_lock_init(&cdev->lock);
 	cdev->channel = NULL;
 	cdev->send_ack = true;
 }
 
-static int hpsc_mbox_client_kernel_probe(struct platform_device *pdev)
+static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev;
 	struct mbox_chan_dev *cdev;
@@ -210,9 +210,9 @@ static int hpsc_mbox_client_kernel_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "Mailbox client kernel module registered\n");
 #if 0
-	u8 msg[HPSC_MBOX_CLIENT_KERNEL_MSG_LEN] = { 0x1 };
-	ret = hpsc_mbox_client_kernel_send(msg);
-	pr_info("hpsc_mbox_client_kernel_send: %d\n", ret);
+	u8 msg[HPSC_MBOX_MSG_LEN] = { 0x1 };
+	ret = hpsc_mbox_kernel_send(msg);
+	pr_info("hpsc_mbox_kernel_send: %d\n", ret);
 #endif
 	return 0;
 
@@ -226,7 +226,7 @@ fail_channel:
 	return ret;
 }
 
-static int hpsc_mbox_client_kernel_remove(struct platform_device *pdev)
+static int hpsc_mbox_kernel_remove(struct platform_device *pdev)
 {
 	int i;
 	dev_info(&pdev->dev, "Mailbox client kernel module: remove\n");
@@ -240,20 +240,20 @@ static int hpsc_mbox_client_kernel_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id mbox_test_match[] = {
-	{ .compatible = "hpsc-mbox-client-kernel" },
+static const struct of_device_id hpsc_mbox_kernel_match[] = {
+	{ .compatible = "hpsc-mbox-kernel" },
 	{},
 };
 
-static struct platform_driver hpsc_mbox_client_kernel_driver = {
+static struct platform_driver hpsc_mbox_kernel_driver = {
 	.driver = {
-		.name = "hpsc_mbox_client_kernel",
-		.of_match_table = mbox_test_match,
+		.name = "hpsc_mbox_kernel",
+		.of_match_table = hpsc_mbox_kernel_match,
 	},
-	.probe  = hpsc_mbox_client_kernel_probe,
-	.remove = hpsc_mbox_client_kernel_remove,
+	.probe  = hpsc_mbox_kernel_probe,
+	.remove = hpsc_mbox_kernel_remove,
 };
-module_platform_driver(hpsc_mbox_client_kernel_driver);
+module_platform_driver(hpsc_mbox_kernel_driver);
 
 MODULE_DESCRIPTION("HPSC mailbox in-kernel interface");
 MODULE_AUTHOR("Connor Imes <cimes@isi.edu>");
