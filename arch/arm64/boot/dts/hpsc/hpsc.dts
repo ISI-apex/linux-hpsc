@@ -449,6 +449,46 @@
                                   <&hpps_mailbox  MBOX_HPPS_TRCH_HPPS_SSW  1  0	MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
 		};
 
+		hpps_wdt0 {
+			compatible = "hpsc,hpsc-wdt";
+			reg = <0x0 0xF9240000 0x0 0x10000>;
+		};
+
+		hpps_wdt1 {
+			compatible = "hpsc,hpsc-wdt";
+			reg = <0x0 0xF9250000 0x0 0x10000>;
+		};
+
+		hpps_wdt2 {
+			compatible = "hpsc,hpsc-wdt";
+			reg = <0x0 0xF9260000 0x0 0x10000>;
+		};
+
+		hpps_wdt3 {
+			compatible = "hpsc,hpsc-wdt";
+			reg = <0x0 0xF9270000 0x0 0x10000>;
+		};
+
+		hpps_wdt4 {
+			compatible = "hpsc,hpsc-wdt";
+			reg = <0x0 0xF9280000 0x0 0x10000>;
+		};
+
+		hpps_wdt5 {
+			compatible = "hpsc,hpsc-wdt";
+			reg = <0x0 0xF9290000 0x0 0x10000>;
+		};
+
+		hpps_wdt6 {
+			compatible = "hpsc,hpsc-wdt";
+			reg = <0x0 0xF92A0000 0x0 0x10000>;
+		};
+
+		hpps_wdt7 {
+			compatible = "hpsc,hpsc-wdt";
+			reg = <0x0 0xF92B0000 0x0 0x10000>;
+		};
+
 		hpps_dma: dma-controller@0xf92e0000 {
 			#dma-cells = <1>;
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
