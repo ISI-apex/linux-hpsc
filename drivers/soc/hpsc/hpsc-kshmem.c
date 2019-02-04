@@ -94,8 +94,8 @@ static int hpsc_kshmem_parse_dt(struct hpsc_kshmem_dev *tdev, const char *name,
 		dev_err(tdev->dev, "size of DT '%s' is too small\n", name);
 		return -ENOMEM;
 	}
-	// should be write-through (don't want messages to get stuck in cache)
-	vaddr = devm_memremap(tdev->dev, res.start, size, MEMREMAP_WT);
+	// use writecombine flag to prevent caching
+	vaddr = devm_memremap(tdev->dev, res.start, size, MEMREMAP_WC);
 	if (!vaddr) {
 		dev_err(tdev->dev, "devm_memremap failed\n");
 		return -ENOMEM;
