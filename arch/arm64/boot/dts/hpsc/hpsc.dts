@@ -40,12 +40,15 @@
 		/* These shared memory regions cover the following range: */
 		/* reg = <0x0 0xbf800000 0x0 0x400000>; */
 		/* First part of the memory is for userspace */
+		/* outbound to TRCH */
 		shm_region0: shm@0xbf800000 {
 			reg = <0x0 0xbf800000 0x0 0x10000>;
 		};
+		/* inbound from TRCH */
 		shm_region1: shm@0xbf810000 {
 			reg = <0x0 0xbf810000 0x0 0x10000>;
 		};
+		/* currently unused */
 		shm_region2: shm@0xbf820000 {
 			reg = <0x0 0xbf820000 0x0 0x3d0000>;
 		};
