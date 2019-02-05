@@ -614,8 +614,8 @@
 			#address-cells = <2>;
 			#size-cells = <2>; 
 			status = "okay";
-			clocks = <&clk100>, <&clk125>;
-			clock-names = "aclk", "memclk";
+			clocks = <&apb_pclk>, <&clk125>;
+			clock-names = "apb_pclk", "memclk"; /* apb_pclk required because amba code looks for it by name */
 			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
 			compatible = "arm,primecell";
 			interrupt-parent = <&gic>;
