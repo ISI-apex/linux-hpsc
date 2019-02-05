@@ -583,7 +583,7 @@
 			interrupts = <GIC_SPI HPPS_IRQ__HPPS_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__HPPS_DMA_EV0   GIC_LVL_HI>;
 			iommus = <&smmu MASTER_ID_HPPS_DMA>;
-			clocks = <&dma_clk>;
+			clocks = <&apb_pclk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
 
@@ -595,7 +595,7 @@
 			interrupts = <GIC_SPI HPPS_IRQ__SRIO0_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__SRIO0_DMA_EV0   GIC_LVL_HI>;
 			iommus = <&smmu MASTER_ID_SRIO0_DMA>;
-			clocks = <&dma_clk>;
+			clocks = <&apb_pclk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
 
@@ -607,7 +607,7 @@
 			interrupts = <GIC_SPI HPPS_IRQ__SRIO1_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__SRIO1_DMA_EV0 GIC_LVL_HI>;
 			iommus = <&smmu MASTER_ID_SRIO1_DMA>;
-			clocks = <&dma_clk>;
+			clocks = <&apb_pclk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
 		smcc: smcc-memory-controller@f92d0000 {
@@ -651,9 +651,9 @@
 		clock-frequency = <125000000>;
 	};
 
-	dma_clk: dma_clk {
+	apb_pclk: apb_pclk {
 		compatible = "fixed-clock";
-		#clock-cells = <0x0>;
+		#clock-cells = <0>;
 		clock-frequency = <533000000>;
 	};
 };
