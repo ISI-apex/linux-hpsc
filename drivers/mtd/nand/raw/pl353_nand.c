@@ -847,13 +847,12 @@ static void pl353_nfc_parse_instructions(struct nand_chip *chip,
 {
 	const struct nand_op_instr *instr = NULL;
 	unsigned int op_id, offset, naddrs;
-	int i, len;
+	int i;
 	const u8 *addrs;
 
 	memset(nfc_op, 0, sizeof(struct pl353_nfc_op));
 	for (op_id = 0; op_id < subop->ninstrs; op_id++) {
 		nfc_op->len = nand_subop_get_data_len(subop, op_id);
-		len = nand_subop_get_data_len(subop, op_id);
 		instr = &subop->instrs[op_id];
 
 		switch (instr->type) {
@@ -929,14 +928,13 @@ static int pl353_nand_exec_op_cmd(struct nand_chip *chip,
 		container_of(chip, struct pl353_nand_controller, chip);
 	unsigned long cmd_phase_data = 0, end_cmd_valid = 0;
 	unsigned long cmd_phase_addr, data_phase_addr, end_cmd;
-	unsigned int op_id, len, offset;
+	unsigned int op_id, len;
 	bool reading;
 
 	pl353_nfc_parse_instructions(chip, subop, &nfc_op);
 	instr = nfc_op.data_instr;
 	op_id = nfc_op.data_instr_idx;
-	len = nand_subop_get_data_len(subop, op_id);
-	offset = nand_subop_get_data_start_off(subop, op_id);
+	len = nfc_op.len;
 
 	pl353_smc_clr_nand_int();
 	/* Get the command phase address */
