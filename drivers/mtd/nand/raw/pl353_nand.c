@@ -852,7 +852,6 @@ static void pl353_nfc_parse_instructions(struct nand_chip *chip,
 
 	memset(nfc_op, 0, sizeof(struct pl353_nfc_op));
 	for (op_id = 0; op_id < subop->ninstrs; op_id++) {
-		nfc_op->len = nand_subop_get_data_len(subop, op_id);
 		instr = &subop->instrs[op_id];
 
 		switch (instr->type) {
@@ -886,11 +885,13 @@ static void pl353_nfc_parse_instructions(struct nand_chip *chip,
 		case NAND_OP_DATA_IN_INSTR:
 			nfc_op->data_instr = instr;
 			nfc_op->data_instr_idx = op_id;
+			nfc_op->len = nand_subop_get_data_len(subop, op_id);
 			break;
 
 		case NAND_OP_DATA_OUT_INSTR:
 			nfc_op->data_instr = instr;
 			nfc_op->data_instr_idx = op_id;
+			nfc_op->len = nand_subop_get_data_len(subop, op_id);
 			break;
 
 		case NAND_OP_WAITRDY_INSTR:
