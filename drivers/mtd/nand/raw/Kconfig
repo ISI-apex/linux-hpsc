@@ -560,7 +560,7 @@ config MTD_NAND_MESON
 
 config MTD_NAND_PL353
 	tristate "ARM Pl353 NAND flash driver"
-	depends on MTD_NAND && ARM
+	depends on MTD_NAND && (ARM || ARM64)
 	depends on PL353_SMC
 	help
 	  Enables support for PrimeCell Static Memory Controller PL353.
