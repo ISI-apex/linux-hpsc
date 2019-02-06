@@ -249,16 +249,15 @@ static int pl353_nand_read_data_op(struct nand_chip *chip,
 
 /**
  * pl353_nand_write_buf - write buffer to chip
- * @mtd:	Pointer to the mtd info structure
+ * @chip:	Pointer to the nand_chip structure
  * @buf:	Pointer to the buffer to store write data
  * @len:	Number of bytes to write
  * @force_8bit:	Force 8-bit bus access
  */
-static void pl353_nand_write_data_op(struct mtd_info *mtd, const u8 *buf,
+static void pl353_nand_write_data_op(struct nand_chip *chip, const u8 *buf,
 				     int len, bool force_8bit)
 {
 	int i;
-	struct nand_chip *chip = mtd_to_nand(mtd);
 	struct pl353_nand_controller *xnfc =
 		container_of(chip, struct pl353_nand_controller, chip);
 
@@ -301,7 +300,7 @@ static int pl353_wait_for_ecc_done(void)
 
 /**
  * pl353_nand_calculate_hwecc - Calculate Hardware ECC
- * @mtd:	Pointer to the mtd_info structure
+ * @chip:	Pointer to the nand_chip structure
  * @data:	Pointer to the page data
  * @ecc:	Pointer to the ECC buffer where ECC data needs to be stored
  *
@@ -323,7 +322,7 @@ static int pl353_wait_for_ecc_done(void)
  *
  * Return:	0 on success or error value on failure
  */
-static int pl353_nand_calculate_hwecc(struct mtd_info *mtd,
+static int pl353_nand_calculate_hwecc(struct nand_chip *chip,
 				      const u8 *data, u8 *ecc)
 {
 	u32 ecc_value;
@@ -354,7 +353,7 @@ static int pl353_nand_calculate_hwecc(struct mtd_info *mtd,
 
 /**
  * pl353_nand_correct_data - ECC correction function
- * @mtd:	Pointer to the mtd_info structure
+ * @chip:	Pointer to the nand_chip structure
  * @buf:	Pointer to the page data
  * @read_ecc:	Pointer to the ECC value read from spare data area
  * @calc_ecc:	Pointer to the calculated ECC value
@@ -365,7 +364,7 @@ static int pl353_nand_calculate_hwecc(struct mtd_info *mtd,
  *		1 if single bit error found and corrected.
  *		-1 if multiple uncorrectable ECC errors found.
  */
-static int pl353_nand_correct_data(struct mtd_info *mtd, unsigned char *buf,
+static int pl353_nand_correct_data(struct nand_chip *chip, unsigned char *buf,
 				   unsigned char *read_ecc,
 				   unsigned char *calc_ecc)
 {
@@ -409,13 +408,14 @@ static int pl353_nand_correct_data(struct mtd_info *mtd, unsigned char *buf,
 	return -1;
 }
 
-static void pl353_prepare_cmd(struct mtd_info *mtd, struct nand_chip *chip,
+static void pl353_prepare_cmd(struct nand_chip *chip,
 			      int page, int column, int start_cmd, int end_cmd,
 			      bool read)
 {
 	unsigned long data_phase_addr;
 	u32 end_cmd_valid = 0;
 	unsigned long cmd_phase_addr = 0, cmd_phase_data = 0;
+	struct mtd_info *mtd = nand_to_mtd(chip);
 
 	struct pl353_nand_controller *xnfc =
 		container_of(chip, struct pl353_nand_controller, chip);
@@ -460,29 +460,28 @@ static void pl353_prepare_cmd(struct mtd_info *mtd, struct nand_chip *chip,
 
 /**
  * pl353_nand_read_oob - [REPLACEABLE] the most common OOB data read function
- * @mtd:	Pointer to the mtd_info structure
  * @chip:	Pointer to the nand_chip structure
  * @page:	Page number to read
  *
  * Return:	Always return zero
  */
-static int pl353_nand_read_oob(struct mtd_info *mtd, struct nand_chip *chip,
-			       int page)
+static int pl353_nand_read_oob(struct nand_chip *chip, int page)
 {
 	unsigned long data_phase_addr;
 	u8 *p;
 	struct pl353_nand_controller *xnfc =
 		container_of(chip, struct pl353_nand_controller, chip);
+	struct mtd_info *mtd = nand_to_mtd(chip);
 	unsigned long nand_offset = (unsigned long __force)xnfc->regs;
 
 	chip->pagebuf = -1;
 	if (mtd->writesize < PL353_NAND_ECC_SIZE)
 		return 0;
 
-	pl353_prepare_cmd(mtd, chip, page, mtd->writesize, NAND_CMD_READ0,
+	pl353_prepare_cmd(chip, page, mtd->writesize, NAND_CMD_READ0,
 			  NAND_CMD_READSTART, 1);
 
-	nand_wait_ready(mtd);
+	nand_wait_ready(chip);
 
 	p = chip->oob_poi;
 	pl353_nand_read_data_op(chip, p,
@@ -502,28 +501,27 @@ static int pl353_nand_read_oob(struct mtd_info *mtd, struct nand_chip *chip,
 
 /**
  * pl353_nand_write_oob - [REPLACEABLE] the most common OOB data write function
- * @mtd:	Pointer to the mtd info structure
  * @chip:	Pointer to the NAND chip info structure
  * @page:	Page number to write
  *
  * Return:	Zero on success and EIO on failure
  */
-static int pl353_nand_write_oob(struct mtd_info *mtd, struct nand_chip *chip,
-				int page)
+static int pl353_nand_write_oob(struct nand_chip *chip, int page)
 {
 	const u8 *buf = chip->oob_poi;
 	unsigned long data_phase_addr;
 	struct pl353_nand_controller *xnfc =
 		container_of(chip, struct pl353_nand_controller, chip);
+	struct mtd_info *mtd = nand_to_mtd(chip);
 	unsigned long nand_offset = (unsigned long __force)xnfc->regs;
 	u32 addrcycles = 0;
 
 	chip->pagebuf = -1;
 	addrcycles = xnfc->addr_cycles;
-	pl353_prepare_cmd(mtd, chip, page, mtd->writesize, NAND_CMD_SEQIN,
+	pl353_prepare_cmd(chip, page, mtd->writesize, NAND_CMD_SEQIN,
 			  NAND_CMD_PAGEPROG, 0);
 
-	pl353_nand_write_data_op(mtd, buf,
+	pl353_nand_write_data_op(chip, buf,
 				 (mtd->oobsize -
 				 PL353_NAND_LAST_TRANSFER_LENGTH), false);
 	buf += (mtd->oobsize - PL353_NAND_LAST_TRANSFER_LENGTH);
@@ -534,9 +532,9 @@ static int pl353_nand_write_oob(struct mtd_info *mtd, struct nand_chip *chip,
 	data_phase_addr |= (1 << END_CMD_VALID_SHIFT);
 	data_phase_addr += nand_offset;
 	xnfc->buf_addr = (void __iomem * __force)data_phase_addr;
-	pl353_nand_write_data_op(mtd, buf, PL353_NAND_LAST_TRANSFER_LENGTH,
+	pl353_nand_write_data_op(chip, buf, PL353_NAND_LAST_TRANSFER_LENGTH,
 				 false);
-	nand_wait_ready(mtd);
+	nand_wait_ready(chip);
 
 	return 0;
 }
@@ -551,19 +549,18 @@ static int pl353_nand_write_oob(struct mtd_info *mtd, struct nand_chip *chip,
  *
  * Return:	Always return zero
  */
-static int pl353_nand_read_page_raw(struct mtd_info *mtd,
-				    struct nand_chip *chip,
+static int pl353_nand_read_page_raw(struct nand_chip *chip,
 				    u8 *buf, int oob_required, int page)
 {
 	unsigned long data_phase_addr;
 	u8 *p;
 	struct pl353_nand_controller *xnfc =
 		container_of(chip, struct pl353_nand_controller, chip);
+	struct mtd_info *mtd = nand_to_mtd(chip);
 	unsigned long nand_offset = (unsigned long __force)xnfc->regs;
 
-	pl353_prepare_cmd(mtd, chip, page, 0, NAND_CMD_READ0,
-		  NAND_CMD_READSTART, 1);
-	nand_wait_ready(mtd);
+	pl353_prepare_cmd(chip, page, 0, NAND_CMD_READ0, NAND_CMD_READSTART, 1);
+	nand_wait_ready(chip);
 	pl353_nand_read_data_op(chip, buf, mtd->writesize, false);
 	p = chip->oob_poi;
 	pl353_nand_read_data_op(chip, p,
@@ -585,7 +582,6 @@ static int pl353_nand_read_page_raw(struct mtd_info *mtd,
 
 /**
  * pl353_nand_write_page_raw - [Intern] raw page write function
- * @mtd:		Pointer to the mtd info structure
  * @chip:		Pointer to the NAND chip info structure
  * @buf:		Pointer to the data buffer
  * @oob_required:	Caller requires OOB data read to chip->oob_poi
@@ -593,8 +589,7 @@ static int pl353_nand_read_page_raw(struct mtd_info *mtd,
  *
  * Return:	Always return zero
  */
-static int pl353_nand_write_page_raw(struct mtd_info *mtd,
-				     struct nand_chip *chip,
+static int pl353_nand_write_page_raw(struct nand_chip *chip,
 				     const u8 *buf, int oob_required,
 				     int page)
 {
@@ -603,13 +598,14 @@ static int pl353_nand_write_page_raw(struct mtd_info *mtd,
 
 	struct pl353_nand_controller *xnfc =
 		container_of(chip, struct pl353_nand_controller, chip);
+	struct mtd_info *mtd = nand_to_mtd(chip);
 	unsigned long nand_offset = (unsigned long __force)xnfc->regs;
 
-	pl353_prepare_cmd(mtd, chip, page, 0, NAND_CMD_SEQIN,
+	pl353_prepare_cmd(chip, page, 0, NAND_CMD_SEQIN,
 			  NAND_CMD_PAGEPROG, 0);
-	pl353_nand_write_data_op(mtd, buf, mtd->writesize, false);
+	pl353_nand_write_data_op(chip, buf, mtd->writesize, false);
 	p = chip->oob_poi;
-	pl353_nand_write_data_op(mtd, p,
+	pl353_nand_write_data_op(chip, p,
 				 (mtd->oobsize -
 				 PL353_NAND_LAST_TRANSFER_LENGTH), false);
 	p += (mtd->oobsize - PL353_NAND_LAST_TRANSFER_LENGTH);
@@ -620,7 +616,7 @@ static int pl353_nand_write_page_raw(struct mtd_info *mtd,
 	data_phase_addr |= (1 << END_CMD_VALID_SHIFT);
 	data_phase_addr += nand_offset;
 	xnfc->buf_addr = (void __iomem * __force)data_phase_addr;
-	pl353_nand_write_data_op(mtd, p, PL353_NAND_LAST_TRANSFER_LENGTH,
+	pl353_nand_write_data_op(chip, p, PL353_NAND_LAST_TRANSFER_LENGTH,
 				 false);
 
 	return 0;
@@ -628,7 +624,6 @@ static int pl353_nand_write_page_raw(struct mtd_info *mtd,
 
 /**
  * nand_write_page_hwecc - Hardware ECC based page write function
- * @mtd:		Pointer to the mtd info structure
  * @chip:		Pointer to the NAND chip info structure
  * @buf:		Pointer to the data buffer
  * @oob_required:	Caller requires OOB data read to chip->oob_poi
@@ -638,8 +633,7 @@ static int pl353_nand_write_page_raw(struct mtd_info *mtd,
  *
  * Return:	Always return zero
  */
-static int pl353_nand_write_page_hwecc(struct mtd_info *mtd,
-				       struct nand_chip *chip,
+static int pl353_nand_write_page_hwecc(struct nand_chip *chip,
 				       const u8 *buf, int oob_required,
 				       int page)
 {
@@ -652,16 +646,17 @@ static int pl353_nand_write_page_hwecc(struct mtd_info *mtd,
 	unsigned long data_phase_addr;
 	struct pl353_nand_controller *xnfc =
 		container_of(chip, struct pl353_nand_controller, chip);
+	struct mtd_info *mtd = nand_to_mtd(chip);
 	unsigned long nand_offset = (unsigned long __force)xnfc->regs;
 
-	pl353_prepare_cmd(mtd, chip, page, 0, NAND_CMD_SEQIN,
+	pl353_prepare_cmd(chip, page, 0, NAND_CMD_SEQIN,
 			  NAND_CMD_PAGEPROG, 0);
 
 	for ( ; (eccsteps - 1); eccsteps--) {
-		pl353_nand_write_data_op(mtd, p, eccsize, false);
+		pl353_nand_write_data_op(chip, p, eccsize, false);
 		p += eccsize;
 	}
-	pl353_nand_write_data_op(mtd, p,
+	pl353_nand_write_data_op(chip, p,
 				 (eccsize - PL353_NAND_LAST_TRANSFER_LENGTH),
 				 false);
 	p += (eccsize - PL353_NAND_LAST_TRANSFER_LENGTH);
@@ -672,7 +667,7 @@ static int pl353_nand_write_page_hwecc(struct mtd_info *mtd,
 	data_phase_addr |= PL353_NAND_ECC_LAST;
 	data_phase_addr += nand_offset;
 	xnfc->buf_addr = (void __iomem * __force)data_phase_addr;
-	pl353_nand_write_data_op(mtd, p, PL353_NAND_LAST_TRANSFER_LENGTH,
+	pl353_nand_write_data_op(chip, p, PL353_NAND_LAST_TRANSFER_LENGTH,
 				 false);
 
 	/* Wait till the ECC operation is complete or timeout */
@@ -680,7 +675,7 @@ static int pl353_nand_write_page_hwecc(struct mtd_info *mtd,
 	if (ret)
 		dev_err(xnfc->dev, "ECC Timeout\n");
 	p = buf;
-	ret = chip->ecc.calculate(mtd, p, &ecc_calc[0]);
+	ret = chip->ecc.calculate(chip, p, &ecc_calc[0]);
 	if (ret)
 		return ret;
 
@@ -698,7 +693,7 @@ static int pl353_nand_write_page_hwecc(struct mtd_info *mtd,
 
 	/* Write the spare area with ECC bytes */
 	oob_ptr = chip->oob_poi;
-	pl353_nand_write_data_op(mtd, oob_ptr,
+	pl353_nand_write_data_op(chip, oob_ptr,
 				 (mtd->oobsize -
 				 PL353_NAND_LAST_TRANSFER_LENGTH), false);
 
@@ -709,16 +704,15 @@ static int pl353_nand_write_page_hwecc(struct mtd_info *mtd,
 	data_phase_addr += nand_offset;
 	xnfc->buf_addr = (void __iomem * __force)data_phase_addr;
 	oob_ptr += (mtd->oobsize - PL353_NAND_LAST_TRANSFER_LENGTH);
-	pl353_nand_write_data_op(mtd, oob_ptr, PL353_NAND_LAST_TRANSFER_LENGTH,
+	pl353_nand_write_data_op(chip, oob_ptr, PL353_NAND_LAST_TRANSFER_LENGTH,
 				 false);
-	nand_wait_ready(mtd);
+	nand_wait_ready(chip);
 
 	return 0;
 }
 
 /**
  * pl353_nand_read_page_hwecc - Hardware ECC based page read function
- * @mtd:		Pointer to the mtd info structure
  * @chip:		Pointer to the NAND chip info structure
  * @buf:		Pointer to the buffer to store read data
  * @oob_required:	Caller requires OOB data read to chip->oob_poi
@@ -738,8 +732,7 @@ static int pl353_nand_write_page_hwecc(struct mtd_info *mtd,
  *
  * Return:	0 always and updates ECC operation status in to MTD structure
  */
-static int pl353_nand_read_page_hwecc(struct mtd_info *mtd,
-				      struct nand_chip *chip,
+static int pl353_nand_read_page_hwecc(struct nand_chip *chip,
 				      u8 *buf, int oob_required, int page)
 {
 	int i, stat, eccsize = chip->ecc.size;
@@ -754,11 +747,11 @@ static int pl353_nand_read_page_hwecc(struct mtd_info *mtd,
 	unsigned long data_phase_addr;
 	struct pl353_nand_controller *xnfc =
 		container_of(chip, struct pl353_nand_controller, chip);
+	struct mtd_info *mtd = nand_to_mtd(chip);
 	unsigned long nand_offset = (unsigned long __force)xnfc->regs;
 
-	pl353_prepare_cmd(mtd, chip, page, 0, NAND_CMD_READ0,
-			  NAND_CMD_READSTART, 1);
-	nand_wait_ready(mtd);
+	pl353_prepare_cmd(chip, page, 0, NAND_CMD_READ0, NAND_CMD_READSTART, 1);
+	nand_wait_ready(chip);
 
 	for ( ; (eccsteps - 1); eccsteps--) {
 		pl353_nand_read_data_op(chip, p, eccsize, false);
@@ -785,7 +778,7 @@ static int pl353_nand_read_page_hwecc(struct mtd_info *mtd,
 
 	/* Read the calculated ECC value */
 	p = buf;
-	ret = chip->ecc.calculate(mtd, p, &ecc_calc[0]);
+	ret = chip->ecc.calculate(chip, p, &ecc_calc[0]);
 	if (ret)
 		return ret;
 
@@ -823,7 +816,7 @@ static int pl353_nand_read_page_hwecc(struct mtd_info *mtd,
 
 	/* Check ECC error for all blocks and correct if it is correctable */
 	for (i = 0 ; eccsteps; eccsteps--, i += eccbytes, p += eccsize) {
-		stat = chip->ecc.correct(mtd, p, &ecc[i], &ecc_calc[i]);
+		stat = chip->ecc.correct(chip, p, &ecc[i], &ecc_calc[i]);
 		if (stat < 0) {
 			mtd->ecc_stats.failed++;
 		} else {
@@ -837,13 +830,13 @@ static int pl353_nand_read_page_hwecc(struct mtd_info *mtd,
 
 /**
  * pl353_nand_select_chip - Select the flash device
- * @mtd:	Pointer to the mtd info structure
  * @chip:	Pointer to the NAND chip info structure
+ * @cs:		The chip number
  *
  * This function is empty as the NAND controller handles chip select line
  * internally based on the chip address passed in command and data phase.
  */
-static void pl353_nand_select_chip(struct mtd_info *mtd, int chip)
+static void pl353_nand_select_chip(struct nand_chip *chip, int cs)
 {
 }
 
@@ -1021,22 +1014,22 @@ static int pl353_nand_exec_op_cmd(struct nand_chip *chip,
 
 	if (!nfc_op.data_instr) {
 		if (nfc_op.rdy_timeout_ms)
-			nand_wait_ready(mtd);
+			nand_wait_ready(chip);
 		return 0;
 	}
 
 	reading = (nfc_op.data_instr->type == NAND_OP_DATA_IN_INSTR);
 	if (!reading) {
-		pl353_nand_write_data_op(mtd, instr->ctx.data.buf.out,
+		pl353_nand_write_data_op(chip, instr->ctx.data.buf.out,
 					 len, instr->ctx.data.force_8bit);
 		if (nfc_op.rdy_timeout_ms)
-			nand_wait_ready(mtd);
+			nand_wait_ready(chip);
 		cond_delay(nfc_op.rdy_delay_ns);
 	}
 	if (reading) {
 		cond_delay(nfc_op.rdy_delay_ns);
 		if (nfc_op.rdy_timeout_ms)
-			nand_wait_ready(mtd);
+			nand_wait_ready(chip);
 		pl353_nand_read_data_op(chip, instr->ctx.data.buf.in, len,
 					instr->ctx.data.force_8bit);
 	}
@@ -1090,7 +1083,7 @@ static int pl353_nfc_exec_op(struct nand_chip *chip,
  *
  * Return:	0 on busy or 1 on ready state
  */
-static int pl353_nand_device_ready(struct mtd_info *mtd)
+static int pl353_nand_device_ready(struct nand_chip *chip)
 {
 	if (pl353_smc_get_nand_int_status_raw()) {
 		pl353_smc_clr_nand_int();
@@ -1171,10 +1164,9 @@ static int pl353_nand_ecc_init(struct mtd_info *mtd, struct nand_ecc_ctrl *ecc,
 	return err;
 }
 
-static int pl353_setup_data_interface(struct mtd_info *mtd, int csline,
+static int pl353_setup_data_interface(struct nand_chip *chip, int csline,
 				       const struct nand_data_interface *conf)
 {
-	struct nand_chip *chip = mtd_to_nand(mtd);
 	struct pl353_nand_controller *xnfc =
 		container_of(chip, struct pl353_nand_controller, chip);
 	const struct nand_sdr_timings *sdr;
@@ -1269,6 +1261,8 @@ static int pl353_nand_attach_chip(struct nand_chip *chip)
 
 static const struct nand_controller_ops pl353_nand_controller_ops = {
 	.attach_chip = pl353_nand_attach_chip,
+	.exec_op = pl353_nfc_exec_op,
+	.setup_data_interface = pl353_setup_data_interface,
 };
 
 /**
@@ -1304,7 +1298,6 @@ static int pl353_nand_probe(struct platform_device *pdev)
 
 	chip = &xnfc->chip;
 	mtd = nand_to_mtd(chip);
-	chip->exec_op = pl353_nfc_exec_op;
 	nand_set_controller_data(chip, xnfc);
 	mtd->priv = chip;
 	mtd->owner = THIS_MODULE;
@@ -1312,8 +1305,8 @@ static int pl353_nand_probe(struct platform_device *pdev)
 	nand_set_flash_node(chip, xnfc->dev->of_node);
 
 	/* Set the driver entry points for MTD */
-	chip->dev_ready = pl353_nand_device_ready;
-	chip->select_chip = pl353_nand_select_chip;
+	chip->legacy.dev_ready = pl353_nand_device_ready;
+	chip->legacy.select_chip = pl353_nand_select_chip;
 	/* If we don't set this delay driver sets 20us by default */
 	np = of_get_next_parent(xnfc->dev->of_node);
 	xnfc->mclk = of_clk_get(np, 0);
@@ -1328,14 +1321,13 @@ static int pl353_nand_probe(struct platform_device *pdev)
 		val = 8;
 
 	xnfc->buswidth = val;
-	chip->chip_delay = 30;
+	chip->legacy.chip_delay = 30;
 	/* Set the device option and flash width */
 	chip->options = NAND_BUSWIDTH_AUTO;
 	chip->bbt_options = NAND_BBT_USE_FLASH;
 	platform_set_drvdata(pdev, xnfc);
-	chip->setup_data_interface = pl353_setup_data_interface;
-	chip->dummy_controller.ops = &pl353_nand_controller_ops;
-	ret = nand_scan(mtd, 1);
+	chip->legacy.dummy_controller.ops = &pl353_nand_controller_ops;
+	ret = nand_scan(chip, 1);
 	if (ret) {
 		dev_err(xnfc->dev, "could not scan the nand chip\n");
 		return ret;
@@ -1363,10 +1355,10 @@ static int pl353_nand_probe(struct platform_device *pdev)
 static int pl353_nand_remove(struct platform_device *pdev)
 {
 	struct pl353_nand_controller *xnfc = platform_get_drvdata(pdev);
-	struct mtd_info *mtd = nand_to_mtd(&xnfc->chip);
+	struct nand_chip *chip =  &xnfc->chip;
 
 	/* Release resources, unregister device */
-	nand_release(mtd);
+	nand_release(chip);
 
 	return 0;
 }
