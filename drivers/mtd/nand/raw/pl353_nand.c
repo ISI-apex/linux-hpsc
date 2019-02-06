@@ -230,7 +230,7 @@ static int pl353_nand_read_data_op(struct nand_chip *chip,
 	if (force_8bit)
 		pl353_nfc_force_byte_access(chip, true);
 
-	if ((IS_ALIGNED((uint32_t)in, sizeof(uint32_t)) &&
+	if ((IS_ALIGNED((uintptr_t)in, sizeof(uint32_t)) &&
 	    IS_ALIGNED(len, sizeof(uint32_t))) || (!force_8bit)) {
 		u32 *ptr = (u32 *)in;
 
@@ -264,7 +264,7 @@ static void pl353_nand_write_data_op(struct nand_chip *chip, const u8 *buf,
 	if (force_8bit)
 		pl353_nfc_force_byte_access(chip, true);
 
-	if ((IS_ALIGNED((uint32_t)buf, sizeof(uint32_t)) &&
+	if ((IS_ALIGNED((uintptr_t)buf, sizeof(uint32_t)) &&
 	    IS_ALIGNED(len, sizeof(uint32_t))) || (!force_8bit)) {
 		u32 *ptr = (u32 *)buf;
 
