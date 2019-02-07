@@ -36,11 +36,10 @@ struct mbox_client_dev {
 static void client_rx_callback(struct mbox_client *cl, void *msg)
 {
 	struct mbox_chan_dev *cdev = container_of(cl, struct mbox_chan_dev, cl);
-	int ret;
 	dev_info(cl->dev, "rx_callback\n");
-	ret = hpsc_notif_recv(msg, HPSC_MBOX_MSG_LEN);
-	// tell the controller to issue the ACK (NULL if !ret) or NACK
-	mbox_send_message(cdev->channel, ERR_PTR(ret));
+	// tell the controller to issue the ACK before processing
+	mbox_send_message(cdev->channel, NULL);
+	hpsc_notif_recv(msg, HPSC_MBOX_MSG_LEN);
 }
 
 static void client_tx_done(struct mbox_client *cl, void *msg, int r)
