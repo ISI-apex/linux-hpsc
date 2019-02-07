@@ -484,9 +484,11 @@
 				    <&trch_mbox  24     0                    0 0>,
 				    <&trch_mbox  25     0                    0 0>,
 				    <&trch_mbox  26     0                    0 0>,
-				    <&trch_mbox  27     0                    0 0>,
-				    <&trch_mbox  28     0                    0 0>,
-				    <&trch_mbox  29     0                    0 0>;
+				    <&trch_mbox  27     0                    0 0>;
+				    /* Reserved for ATF
+				     * <&trch_mbox  28     0                    0 0>,
+				     * <&trch_mbox  29     0                    0 0>;
+				     */
 				    /* Reserved for in-kernel SSW (see below)
 				     * <&trch_mbox  30     0                    0 0>,
 				     * <&trch_mbox  31     0                    0 0>;
