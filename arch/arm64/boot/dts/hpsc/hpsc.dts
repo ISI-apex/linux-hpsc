@@ -78,6 +78,7 @@
 	};
 	kshm_trch {
 		compatible = "hpsc-kshmem";
+		poll-interval-ms = <100>;
 		memory-region-in = <&kshm_region_trch_in>;
 		memory-region-out = <&kshm_region_trch_out>;
 	};
