@@ -17,9 +17,6 @@
 #include "hpsc_msg.h"
 #include "hpsc_notif.h"
 
-// TODO: This is an arbitrarily chosen value. Make configurable in DT?
-static const unsigned long sleep_ms = 100;
-
 // All subsystems must understand this structure and its protocol
 struct hpsc_shmem_region {
 	u8 data[HPSC_MSG_SIZE];
@@ -33,6 +30,7 @@ struct hpsc_kshmem_dev {
 	struct hpsc_shmem_region	*out;
 	struct notifier_block		nb;
 	struct task_struct		*t;
+	unsigned int			poll_interval_ms;
 };
 
 static int hpsc_kshmem_send(struct notifier_block *nb, unsigned long action,
@@ -64,13 +62,14 @@ static int hpsc_kshmem_recv(void *arg)
 			hpsc_notif_recv(tdev->in->data, HPSC_MSG_SIZE);
 			tdev->in->is_new = 0;
 		}
-		msleep_interruptible(sleep_ms);
+		msleep_interruptible(tdev->poll_interval_ms);
 	}
 	return 0;
 }
 
-static int hpsc_kshmem_parse_dt(struct hpsc_kshmem_dev *tdev, const char *name,
-				struct hpsc_shmem_region **reg)
+static int hpsc_kshmem_parse_dt_mreg(struct hpsc_kshmem_dev *tdev,
+				     const char *name,
+				     struct hpsc_shmem_region **reg)
 {
 	struct device_node *np;
 	struct resource res;
@@ -104,6 +103,20 @@ static int hpsc_kshmem_parse_dt(struct hpsc_kshmem_dev *tdev, const char *name,
 	return 0;
 }
 
+static int hpsc_kshmem_parse_dt(struct hpsc_kshmem_dev *tdev)
+{
+	// get interval for polling inbound region
+	int ret = of_property_read_u32(tdev->dev->of_node, "poll-interval-ms",
+				       &tdev->poll_interval_ms);
+	if (ret) {
+		dev_err(tdev->dev, "invalid DT 'poll-interval-ms' value\n");
+		return ret;
+	}
+	// now parse memory regions
+	return hpsc_kshmem_parse_dt_mreg(tdev, "memory-region-in", &tdev->in) ||
+	       hpsc_kshmem_parse_dt_mreg(tdev, "memory-region-out", &tdev->out);
+}
+
 static int hpsc_kshmem_probe(struct platform_device *pdev)
 {
 	struct hpsc_kshmem_dev *tdev;
@@ -117,8 +130,7 @@ static int hpsc_kshmem_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, tdev);
 
 	spin_lock_init(&tdev->lock);
-	ret = hpsc_kshmem_parse_dt(tdev, "memory-region-in", &tdev->in) ||
-	      hpsc_kshmem_parse_dt(tdev, "memory-region-out", &tdev->out);
+	ret = hpsc_kshmem_parse_dt(tdev);
 	if (ret)
 		return ret;
 
