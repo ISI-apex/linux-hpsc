@@ -26,10 +26,6 @@
 		ethernet0 = &xgmac;
 	};
 
-	chosen {
-		bootargs = "earlycon=uart8250,mmio32,0xF92C0000,115200n8 console=ttyS0,115200n8";
-	};
-
         /* NOTE: memory { } nodes appended by u-boot from its device tree */
 
 	reserved-memory { /* TOOD: confirm that this is respected, also can/should this be in u-boot DT? */
