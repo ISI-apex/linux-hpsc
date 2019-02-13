@@ -292,7 +292,6 @@
 			#size-cells = <0>;
 			iommus = <&smmu MASTER_ID_XGMAC>;
 			power-domains = <&pd_xgmac>;
-			local-mac-address = [00 0a 35 00 02 90];
 			phy-handle = <&phy0>;
 			phy-mode = "rgmii-id";
 
