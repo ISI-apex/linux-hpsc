@@ -21,10 +21,11 @@
 	compatible = "xlnx,zynqmp";
 	#address-cells = <2>;
 	#size-cells = <2>;
-
+#if 0
 	aliases {
 		ethernet0 = &xgmac;
 	};
+#endif
 
         /* NOTE: memory { } nodes appended by u-boot from its device tree */
 
@@ -33,6 +34,7 @@
 		#size-cells = <2>;
 		ranges;
 
+#if 0
 		/* These shared memory regions cover the following range: */
 		/* reg = <0x0 0xbf800000 0x0 0x400000>; */
 		/* First part of the memory is for userspace */
@@ -55,8 +57,10 @@
 		kshm_region_trch_out: kshm@0xbfbf8000 {
 			reg = <0x0 0xbfbf8000 0x0 0x08000>;
 		};
+#endif
 	};
 
+#if 0
 	shm0 {
 		compatible = "hpsc-shmem";
 		region-name = "region0";
@@ -78,6 +82,7 @@
 		memory-region-in = <&kshm_region_trch_in>;
 		memory-region-out = <&kshm_region_trch_out>;
 	};
+#endif
 
 	cpus {
 		#address-cells = <1>;
@@ -88,6 +93,7 @@
 				core0 {
 					cpu = <&cpul0>;
 				};
+#if 0
 				core1 {
 					cpu = <&cpul1>;
 				};
@@ -97,7 +103,9 @@
 				core3 {
 					cpu = <&cpul3>;
 				};
+#endif
 			};
+#if 0
 			cluster1 {
 				core0 {
 					cpu = <&cpub0>;
@@ -112,6 +120,7 @@
 					cpu = <&cpub3>;
 				};
 			};
+#endif
 
 		};
          
@@ -123,6 +132,7 @@
 			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
+#if 0
 		cpul1: cpu@1 {
 			compatible = "arm,cortex-a53", "arm,armv8";
 			device_type = "cpu";
@@ -178,6 +188,7 @@
 			reg = <0x103>;
 			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
+#endif
 
 		idle-states {
 			entry-mehod = "arm,psci";
@@ -193,10 +204,12 @@
 		};
 	};
 
+#if 0
 	dcc: dcc {
 		compatible = "arm,dcc";
 		status = "okay";
 	};
+#endif
 
 	power-domains {
 		compatible = "xlnx,zynqmp-genpd";
@@ -222,6 +235,7 @@
 		};
 	};
 
+#if 0
 	pmu {
 		compatible = "arm,armv8-pmuv3";
 		interrupt-parent = <&gic>;
@@ -236,6 +250,7 @@
 		interrupt-affinity = <&cpul0>, <&cpul1>, <&cpul2>, <&cpul3>,
                                      <&cpub0>, <&cpub1>, <&cpub2>, <&cpub3>;
 	};
+#endif
 
 	psci {
 		compatible = "arm,psci-0.2";
@@ -251,9 +266,11 @@
 			     <GIC_PPI PPI_IRQ__TIMER_HYP  GIC_LVL_LO>;
 	};
 
+#if 0
 	edac {
 		compatible = "arm,cortex-a53-edac";
 	};
+#endif
 
 	amba_apu: amba_apu {
 		compatible = "simple-bus";
@@ -278,6 +295,7 @@
 		#size-cells = <2>;
 		ranges;
 
+#if 0
 		xgmac: ethernet@0xe5300000 {
 			compatible = "cdns,zynqmp-gem";
 			status = "okay";
@@ -302,6 +320,7 @@
 				ti,rxctrl-strap-worka;
 			};
 		};
+#endif
 
 #if 0 /* TODO */
 		pcie: pcie@0xe5330000 {
@@ -380,6 +399,7 @@
 			power-domains = <&pd_uart0>;
 		};
 
+#if 0
 		trch_mbox: mailbox@0xfff50000 {
 			compatible = "hpsc,hpsc-mbox";
                         reg = <0x0 0xfff50000 0x0 0x1000>;
@@ -635,6 +655,7 @@
 				#size-cells = <0x2>; 
 			};
 		};
+#endif
 	};
 
 	uart_clk: uart_clk {
