@@ -392,7 +392,7 @@
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__HPPS_UART0_0 GIC_LVL_HI>;
 			reg = <0x0 0xf92c0000 0x0 0x1000>;
-			current-speed = <115200>;
+			current-speed = <500000>;
 			reg-shift = <2>;
 			clocks = <&uart_clk &uart_clk>;
 			clock-names = "uart_clk", "pclk";
