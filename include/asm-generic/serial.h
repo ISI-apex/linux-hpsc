@@ -9,6 +9,6 @@
  * that have this clock rate.
  */
 
-#define BASE_BAUD (1843200 / 16)
+#define BASE_BAUD (16000000 / 16)
 
 #endif /* __ASM_GENERIC_SERIAL_H */
