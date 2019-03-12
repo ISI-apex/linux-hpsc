@@ -359,6 +359,7 @@
 		};
 #endif
 
+#if 0
 		smmu: smmu@f9300000 {
 			compatible = "arm,mmu-500";
 			reg = <0x0 0xf9300000 0x0 0x20000>;
@@ -384,6 +385,7 @@
                                 <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_14 GIC_LVL_HI>,
                                 <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_15 GIC_LVL_HI>;
 		};
+#endif
 
 		uart0: serial@f92c0000 {
 			compatible = "ns16550a";
