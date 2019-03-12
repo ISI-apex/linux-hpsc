@@ -280,15 +280,6 @@ config ARCH_ZYNQMP
 
 config ARCH_HPSC
 	bool "HPSC Chiplet"
-	select WATCHDOG_PRETIMEOUT_GOV_NOTIFIER
-	select WATCHDOG_PRETIMEOUT_DEFAULT_GOV_NOTIFIER
-	imply HPSC_MBOX
-	imply HPSC_WDT
-	imply HPSC_RTI_TIMER
-	imply HPSC_MBOX_USERSPACE
-	imply HPSC_MBOX_KERNEL
-	imply HPSC_SHMEM
-	imply HPSC_KSHMEM
 	help
 	  This enables support for the HPSC Chiplet
 
