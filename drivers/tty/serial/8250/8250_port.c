@@ -2630,9 +2630,13 @@ static unsigned int serial8250_get_baud_rate(struct uart_port *port,
 	 * slower than nominal still match standard baud rates without
 	 * causing transmission errors.
 	 */
+#if 0
 	return uart_get_baud_rate(port, termios, old,
 				  port->uartclk / 16 / UART_DIV_MAX,
 				  port->uartclk);
+#else
+	return 125000;
+#endif
 }
 
 void
