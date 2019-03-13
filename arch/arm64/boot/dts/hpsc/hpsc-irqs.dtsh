@@ -157,8 +157,7 @@
 
 // ******** HPPS interrupt controller inputs **************
 
-#define HPPS_IRQ__HPPS_UART0_0                   0
-#define HPPS_IRQ__HPPS_UART0_1                   1
+#define HPPS_IRQ__HPPS_UART0_0                   1
 
 #define HPPS_IRQ__HT_MBOX_0                      2
 #define HPPS_IRQ__HT_MBOX_1                      3
