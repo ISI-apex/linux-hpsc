@@ -44,7 +44,16 @@ enum pstore_type_id {
 	PSTORE_TYPE_PPC_COMMON	= 6,
 	PSTORE_TYPE_PMSG	= 7,
 	PSTORE_TYPE_PPC_OPAL	= 8,
+	PSTORE_TYPE_TRACE	= 9,
 	PSTORE_TYPE_UNKNOWN	= 255
+};
+
+/* subtypes of the PSTORE_TYPE_FTRACE record
+ * Value is packed into the record timestamp field, so value range must fit
+ * into bitfield defined by TS_TYPE_* macros below. */
+enum pstore_ftrace_type_id {
+	PSTORE_FTRACE_TYPE_CALL = 0,
+	PSTORE_FTRACE_TYPE_MSG = 1,
 };
 
 struct pstore_info;
@@ -200,8 +209,18 @@ extern bool pstore_cannot_block_path(enum kmsg_dump_reason reason);
 
 struct pstore_ftrace_record {
 	unsigned long ip;
+	u64 ts; /* also stores type and possibly CPU ID */
+	char rec[0]; /* variable-typed sub-record */
+};
+
+struct pstore_ftrace_call_record {
 	unsigned long parent_ip;
-	u64 ts;
+};
+
+struct pstore_ftrace_msg_record {
+	const char *fmt;
+	unsigned len; /* used only for seeking */
+	u32 args[0];
 };
 
 /*
@@ -215,8 +234,47 @@ struct pstore_ftrace_record {
 #define PSTORE_CPU_IN_IP 0x3
 #endif
 
-#define TS_CPU_SHIFT 8
-#define TS_CPU_MASK (BIT(TS_CPU_SHIFT) - 1)
+#define TS_TYPE_SHIFT   0
+#define TS_TYPE_LEN     1
+#define TS_TYPE_MASK    ((BIT(TS_TYPE_LEN) - 1) << TS_TYPE_SHIFT)
+
+#ifndef PSTORE_CPU_IN_IP
+#define TS_CPU_SHIFT    1
+#define TS_CPU_LEN      8
+#define TS_CPU_MASK     ((BIT(TS_CPU_LEN) - 1) << TS_CPU_SHIFT)
+#else  /* PSTORE_CPU_IN_IP */
+#define TS_CPU_LEN      0
+#endif /* PSTORE_CPU_IN_IP */
+
+#define TS_SHIFT        (TS_TYPE_LEN + TS_CPU_LEN)
+#define TS_LEN          (64 - TS_SHIFT)
+#define TS_MASK         ((BIT(TS_LEN) - 1) << TS_SHIFT)
+
+static inline void
+pstore_ftrace_encode_type(struct pstore_ftrace_record *rec,
+                        enum pstore_ftrace_type_id type)
+{
+	rec->ts &= ~(TS_TYPE_MASK);
+	rec->ts |= (type << TS_TYPE_SHIFT);
+}
+
+static inline unsigned int
+pstore_ftrace_decode_type(struct pstore_ftrace_record *rec)
+{
+	return (rec->ts & TS_TYPE_MASK) >> TS_TYPE_SHIFT;
+}
+
+static inline u64
+pstore_ftrace_read_timestamp(struct pstore_ftrace_record *rec)
+{
+	return rec->ts >> TS_SHIFT;
+}
+
+static inline void
+pstore_ftrace_write_timestamp(struct pstore_ftrace_record *rec, u64 val)
+{
+	rec->ts = (rec->ts & ~TS_MASK) | (val << TS_SHIFT);
+}
 
 /*
  * If CPU number can be stored in IP, store it there, otherwise store it in
@@ -235,42 +293,18 @@ pstore_ftrace_decode_cpu(struct pstore_ftrace_record *rec)
 {
 	return rec->ip & PSTORE_CPU_IN_IP;
 }
-
-static inline u64
-pstore_ftrace_read_timestamp(struct pstore_ftrace_record *rec)
-{
-	return rec->ts;
-}
-
-static inline void
-pstore_ftrace_write_timestamp(struct pstore_ftrace_record *rec, u64 val)
-{
-	rec->ts = val;
-}
 #else
 static inline void
 pstore_ftrace_encode_cpu(struct pstore_ftrace_record *rec, unsigned int cpu)
 {
 	rec->ts &= ~(TS_CPU_MASK);
-	rec->ts |= cpu;
+	rec->ts |= (cpu << TS_CPU_SHIFT);
 }
 
 static inline unsigned int
 pstore_ftrace_decode_cpu(struct pstore_ftrace_record *rec)
 {
-	return rec->ts & TS_CPU_MASK;
-}
-
-static inline u64
-pstore_ftrace_read_timestamp(struct pstore_ftrace_record *rec)
-{
-	return rec->ts >> TS_CPU_SHIFT;
-}
-
-static inline void
-pstore_ftrace_write_timestamp(struct pstore_ftrace_record *rec, u64 val)
-{
-	rec->ts = (rec->ts & TS_CPU_MASK) | (val << TS_CPU_SHIFT);
+	return (rec->ts & TS_CPU_MASK) >> TS_CPU_SHIFT;
 }
 #endif
 

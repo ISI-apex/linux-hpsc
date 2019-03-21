@@ -30,17 +30,34 @@
 /* This doesn't need to be atomic: speed is chosen over correctness here. */
 static u64 pstore_ftrace_stamp;
 
+#define TRACE_MSG_MAX_SIZE 64
+
+static void notrace ftrace_record_init(struct pstore_ftrace_record *rec,
+						enum pstore_ftrace_type_id type, unsigned long ip)
+{
+	rec->ip = ip;
+	pstore_ftrace_write_timestamp(rec, pstore_ftrace_stamp++);
+	pstore_ftrace_encode_cpu(rec, raw_smp_processor_id());
+	pstore_ftrace_encode_type(rec, type);
+}
+
 static void notrace pstore_ftrace_call(unsigned long ip,
 				       unsigned long parent_ip,
 				       struct ftrace_ops *op,
 				       struct pt_regs *regs)
 {
 	unsigned long flags;
-	struct pstore_ftrace_record rec = {};
+
+	char rec_buffer[sizeof(struct pstore_ftrace_record) +
+					sizeof(struct pstore_ftrace_call_record)];
+	struct pstore_ftrace_record *rec = (struct pstore_ftrace_record *)rec_buffer;
+	struct pstore_ftrace_call_record *call_rec = (struct pstore_ftrace_call_record *)&rec->rec[0];
+
 	struct pstore_record record = {
 		.type = PSTORE_TYPE_FTRACE,
-		.buf = (char *)&rec,
-		.size = sizeof(rec),
+		.buf = (char *)rec,
+		.size = sizeof(struct pstore_ftrace_record) +
+				sizeof(struct pstore_ftrace_call_record),
 		.psi = psinfo,
 	};
 
@@ -49,10 +66,8 @@ static void notrace pstore_ftrace_call(unsigned long ip,
 
 	local_irq_save(flags);
 
-	rec.ip = ip;
-	rec.parent_ip = parent_ip;
-	pstore_ftrace_write_timestamp(&rec, pstore_ftrace_stamp++);
-	pstore_ftrace_encode_cpu(&rec, raw_smp_processor_id());
+	ftrace_record_init(rec, PSTORE_FTRACE_TYPE_CALL, ip);
+	call_rec->parent_ip = parent_ip;
 	psinfo->write(&record);
 
 	local_irq_restore(flags);
@@ -61,6 +76,47 @@ static void notrace pstore_ftrace_call(unsigned long ip,
 static struct ftrace_ops pstore_ftrace_ops __read_mostly = {
 	.func	= pstore_ftrace_call,
 };
+
+void notrace pstore_ftrace_msg(unsigned long ip, const char *fmt,
+							   const u32 *buf, unsigned len)
+{
+	unsigned long flags;
+
+	char rec_buffer[sizeof(struct pstore_ftrace_record) +
+					sizeof(struct pstore_ftrace_msg_record) + TRACE_MSG_MAX_SIZE];
+	struct pstore_ftrace_record *rec = (struct pstore_ftrace_record *)rec_buffer;
+	struct pstore_ftrace_msg_record *msg_rec = (struct pstore_ftrace_msg_record *)&rec->rec[0];
+
+	struct pstore_record record = {
+		.type = PSTORE_TYPE_FTRACE,
+		.buf = (char *)rec,
+		.size = sizeof(struct pstore_ftrace_record) +
+				sizeof(struct pstore_ftrace_msg_record), /* len added later */
+		.psi = psinfo,
+	};
+
+	if (unlikely(oops_in_progress))
+		return;
+
+	local_irq_save(flags);
+
+	ftrace_record_init(rec, PSTORE_FTRACE_TYPE_MSG, ip);
+
+	if (likely(len < TRACE_MSG_MAX_SIZE)) {
+		msg_rec->fmt = fmt;
+		msg_rec->len = len;
+		memcpy(msg_rec->args, buf, len);
+		record.size += len;
+	} else {
+		msg_rec->fmt = "<OVRFLW>";
+		msg_rec->len = 0;
+	}
+
+	psinfo->write(&record);
+
+	local_irq_restore(flags);
+}
+
 
 static DEFINE_MUTEX(pstore_ftrace_lock);
 static bool pstore_ftrace_enabled;

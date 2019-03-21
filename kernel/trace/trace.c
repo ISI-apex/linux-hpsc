@@ -2889,6 +2889,10 @@ static void trace_printk_start_stop_comm(int enabled)
 		tracing_stop_cmdline_record();
 }
 
+/* TODO .... */
+void notrace pstore_ftrace_msg(unsigned long ip, const char *fmt,
+                               const u32 *buf, unsigned len);
+
 /**
  * trace_vbprintk - write binary msg to tracing buffer
  *
@@ -2936,6 +2940,12 @@ int trace_vbprintk(unsigned long ip, const char *fmt, va_list args)
 	entry->fmt			= fmt;
 
 	memcpy(entry->buf, tbuffer, sizeof(u32) * len);
+
+    /* TODO .... */
+#if 1
+    pstore_ftrace_msg(entry->ip, entry->fmt, entry->buf, sizeof(u32) * len);
+#endif
+
 	if (!call_filter_check_discard(call, entry, buffer, event)) {
 		__buffer_unlock_commit(buffer, event);
 		ftrace_trace_stack(tr, buffer, flags, 6, pc, NULL);

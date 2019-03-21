@@ -12,6 +12,8 @@
  *
  */
 
+#define DEBUG 1
+
 #define pr_fmt(fmt) "persistent_ram: " fmt
 
 #include <linux/device.h>

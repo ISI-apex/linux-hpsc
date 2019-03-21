@@ -56,8 +56,6 @@ struct pstore_ftrace_seq_data {
 	size_t size;
 };
 
-#define REC_SIZE sizeof(struct pstore_ftrace_record)
-
 static void free_pstore_private(struct pstore_private *private)
 {
 	if (!private)
@@ -69,24 +67,57 @@ static void free_pstore_private(struct pstore_private *private)
 	kfree(private);
 }
 
+static int pstore_ftrace_record_size(struct pstore_ftrace_record *rec)
+{
+	struct pstore_ftrace_msg_record *msg_rec;
+	int rec_sz = sizeof(struct pstore_ftrace_record);
+	enum pstore_ftrace_type_id type = pstore_ftrace_decode_type(rec);
+
+	switch (type) {
+		case PSTORE_FTRACE_TYPE_CALL:
+			rec_sz += sizeof(struct pstore_ftrace_call_record);
+			break;
+		case PSTORE_FTRACE_TYPE_MSG:
+			msg_rec = (struct pstore_ftrace_msg_record *)&rec->rec[0];
+			rec_sz += sizeof(struct pstore_ftrace_msg_record) + msg_rec->len;
+			break;
+		default:
+			return -1;
+	}
+	return rec_sz;
+}
+
 static void *pstore_ftrace_seq_start(struct seq_file *s, loff_t *pos)
 {
 	struct pstore_private *ps = s->private;
 	struct pstore_ftrace_seq_data *data;
+	loff_t p = 0;
+	char *recp;
+	unsigned rec_sz;
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return NULL;
 
-	data->off = ps->total_size % REC_SIZE;
-	data->off += *pos * REC_SIZE;
-	if (data->off + REC_SIZE > ps->total_size) {
-		kfree(data);
-		return NULL;
+	recp = ps->record->buf + data->off;
+	while (p != *pos && data->off < ps->total_size) {
+		rec_sz = pstore_ftrace_record_size((struct pstore_ftrace_record *)recp);
+		if (rec_sz < 0) 
+			goto out_error;
+
+		data->off += rec_sz;
+		recp += rec_sz;
+		p++;
 	}
+
+	if (p != *pos) /* given offset is out of range */
+		goto out_error;
 
 	return data;
 
+out_error:
+	kfree(data);
+	return NULL;
 }
 
 static void pstore_ftrace_seq_stop(struct seq_file *s, void *v)
@@ -98,9 +129,14 @@ static void *pstore_ftrace_seq_next(struct seq_file *s, void *v, loff_t *pos)
 {
 	struct pstore_private *ps = s->private;
 	struct pstore_ftrace_seq_data *data = v;
+	char *recp = ps->record->buf + data->off;
+	int rec_sz = pstore_ftrace_record_size((struct pstore_ftrace_record *)recp);
 
-	data->off += REC_SIZE;
-	if (data->off + REC_SIZE > ps->total_size)
+	if (rec_sz < 0) 
+		return NULL;
+
+	data->off += rec_sz;
+	if (data->off + rec_sz > ps->total_size)
 		return NULL;
 
 	(*pos)++;
@@ -111,15 +147,32 @@ static int pstore_ftrace_seq_show(struct seq_file *s, void *v)
 {
 	struct pstore_private *ps = s->private;
 	struct pstore_ftrace_seq_data *data = v;
-	struct pstore_ftrace_record *rec;
+	struct pstore_ftrace_record *rec =
+		(struct pstore_ftrace_record *)(ps->record->buf + data->off);
+	enum pstore_ftrace_type_id type = pstore_ftrace_decode_type(rec);
+	struct pstore_ftrace_call_record *call_rec;
+	struct pstore_ftrace_msg_record *msg_rec;
+	char msg[32];
 
-	rec = (struct pstore_ftrace_record *)(ps->record->buf + data->off);
+	seq_printf(s, "CPU:%d ts:%llu %08lx  ",
+			pstore_ftrace_decode_cpu(rec),
+			pstore_ftrace_read_timestamp(rec), rec->ip);
 
-	seq_printf(s, "CPU:%d ts:%llu %08lx  %08lx  %pf <- %pF\n",
-		   pstore_ftrace_decode_cpu(rec),
-		   pstore_ftrace_read_timestamp(rec),
-		   rec->ip, rec->parent_ip, (void *)rec->ip,
-		   (void *)rec->parent_ip);
+	switch (type) {
+		case PSTORE_FTRACE_TYPE_CALL:
+			call_rec = (struct pstore_ftrace_call_record *)&rec->rec[0];
+			seq_printf(s, "%08lx  %pf <- %pF\n",
+					call_rec->parent_ip, (void *)rec->ip,
+					(void *)call_rec->parent_ip);
+			break;
+		case PSTORE_FTRACE_TYPE_MSG:
+			msg_rec = (struct pstore_ftrace_msg_record *)&rec->rec[0];
+			bstr_printf(msg, sizeof(msg), msg_rec->fmt, msg_rec->args);
+			seq_printf(s, "%pf: %s\n", (void *)rec->ip, msg);
+			break;
+		default:
+			seq_printf(s, "%pf: <INVALID RECORD>\n", (void *)rec->ip);
+	}
 
 	return 0;
 }
