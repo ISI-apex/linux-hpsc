@@ -39,12 +39,6 @@
 			ftrace-size = <0x400000>;
 		};
 
-		/* General-purpose buffer to transfer data in/out of the machine
-		 * usage (e.g. for output): dd of=/dev/mem seek=<paddr_of_this_buf> */
-		gpbuf@0x100010000 {
-			reg = <0x1 0x00010000 0x0 0x3fff0000>;
-		};
-
 		/* These shared memory regions cover the following range: */
 		/* reg = <0x0 0xbf800000 0x0 0x400000>; */
 		/* First part of the memory is for userspace */
