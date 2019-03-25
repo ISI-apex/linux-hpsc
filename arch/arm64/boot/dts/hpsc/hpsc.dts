@@ -33,11 +33,13 @@
 		#size-cells = <2>;
 		ranges;
 
+#if 0
 		ramoops@0x83200000 {
 			compatible = "ramoops";
 			reg = <0x0 0x83200000 0x0 0x0400000>;
 			ftrace-size = <0x400000>;
 		};
+#endif
 
 		/* These shared memory regions cover the following range: */
 		/* reg = <0x0 0xbf800000 0x0 0x400000>; */
