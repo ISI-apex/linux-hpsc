@@ -25,7 +25,11 @@
 
 #define sev()		asm volatile("sev" : : : "memory")
 #define wfe()		asm volatile("wfe" : : : "memory")
+#if 0
 #define wfi()		asm volatile("wfi" : : : "memory")
+#else
+#define wfi()
+#endif
 
 #define isb()		asm volatile("isb" : : : "memory")
 #define dmb(opt)	asm volatile("dmb " #opt : : : "memory")
