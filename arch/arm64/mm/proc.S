@@ -49,8 +49,10 @@
  *	Idle the processor (wait for interrupt).
  */
 ENTRY(cpu_do_idle)
+#if 0
 	dsb	sy				// WFI may enter a low-power mode
 	wfi
+#endif
 	ret
 ENDPROC(cpu_do_idle)
 
