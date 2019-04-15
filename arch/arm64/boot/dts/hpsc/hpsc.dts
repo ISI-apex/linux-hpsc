@@ -19,6 +19,7 @@
 	#address-cells = <2>;
 	#size-cells = <2>;
 
+	interrupt-parent = <&gic>;
 	aliases {
 #if CONFIG_ETH
 		ethernet0 = &eth;
