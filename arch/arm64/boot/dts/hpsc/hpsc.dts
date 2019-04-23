@@ -554,7 +554,7 @@
 
 		hpps_rti_tmr: hpsc-rti-tmr@0xfeed0000 {
 			compatible = "hpsc,hpsc-rti-timer";
-			reg = <0x0 0xfeed0000 0x0 0x80000>;
+			reg = <0x0 0xffed0000 0x0 0x80000>;
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_PPI PPI_IRQ__RTI_TIMER GIC_EDGE_RISE>;
 			#timer-cells = <1>; /* cpu index */
