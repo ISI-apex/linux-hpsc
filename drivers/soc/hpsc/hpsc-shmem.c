@@ -57,6 +57,7 @@ static int shmem_open(struct inode *inode, struct file *filp)
 						   struct hpsc_shmem_dev, cdev);
 	dev_dbg(tdev->dev, "open\n");
 	filp->private_data = tdev;
+	i_size_write(inode, tdev->size);
 	return 0;
 }
 
