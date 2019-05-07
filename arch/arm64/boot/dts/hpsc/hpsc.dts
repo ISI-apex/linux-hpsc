@@ -101,7 +101,6 @@
 				core0 {
 					cpu = <&cpul0>;
 				};
-#if 0
 				core1 {
 					cpu = <&cpul1>;
 				};
@@ -111,9 +110,7 @@
 				core3 {
 					cpu = <&cpul3>;
 				};
-#endif
 			};
-#if 0
 			cluster1 {
 				core0 {
 					cpu = <&cpub0>;
@@ -128,8 +125,6 @@
 					cpu = <&cpub3>;
 				};
 			};
-#endif
-
 		};
          
 		cpul0: cpu@0 {
@@ -140,7 +135,6 @@
 			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
-#if 0
 		cpul1: cpu@1 {
 			compatible = "arm,cortex-a53", "arm,armv8";
 			device_type = "cpu";
@@ -196,7 +190,6 @@
 			reg = <0x103>;
 			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
-#endif
 
 		idle-states {
 			entry-mehod = "arm,psci";
