@@ -18,9 +18,11 @@
 #include "hpsc_notif.h"
 
 // All subsystems must understand this structure and its protocol
+#define HPSC_SHMEM_STATUS_BIT_NEW 0x01
+#define HPSC_SHMEM_STATUS_BIT_ACK 0x02
 struct hpsc_shmem_region {
 	u8 data[HPSC_MSG_SIZE];
-	u32 is_new;
+	u32 status;
 };
 
 struct hpsc_kshmem_dev {
@@ -33,6 +35,11 @@ struct hpsc_kshmem_dev {
 	unsigned int			poll_interval_ms;
 };
 
+static bool is_new(struct hpsc_shmem_region *reg)
+{
+	return reg->status & HPSC_SHMEM_STATUS_BIT_NEW;
+}
+
 static int hpsc_kshmem_send(struct notifier_block *nb, unsigned long action,
 			    void *msg)
 {
@@ -41,12 +48,12 @@ static int hpsc_kshmem_send(struct notifier_block *nb, unsigned long action,
 	int ret = NOTIFY_STOP;
 	dev_info(tdev->dev, "send\n");
 	spin_lock(&tdev->lock);
-	if (tdev->out->is_new) {
+	if (is_new(tdev->out)) {
 		// a message is still waiting to be processed
 		ret = NOTIFY_STOP_MASK | EAGAIN;
 	} else {
 		memcpy(&tdev->out->data, msg, HPSC_MSG_SIZE);
-		tdev->out->is_new = 1;
+		tdev->out->status |= HPSC_SHMEM_STATUS_BIT_NEW;
 	}
 	spin_unlock(&tdev->lock);
 	return ret;
@@ -56,11 +63,12 @@ static int hpsc_kshmem_recv(void *arg)
 {
 	struct hpsc_kshmem_dev *tdev = (struct hpsc_kshmem_dev *) arg;
 	while (!kthread_should_stop()) {
-		if (tdev->in->is_new) {
+		if (is_new(tdev->in)) {
 			dev_info(tdev->dev, "hpsc_kshmem_recv\n");
 			// don't really care if processing fails...
 			hpsc_notif_recv(tdev->in->data, HPSC_MSG_SIZE);
-			tdev->in->is_new = 0;
+			tdev->in->status &= ~HPSC_SHMEM_STATUS_BIT_NEW;
+			tdev->in->status |= HPSC_SHMEM_STATUS_BIT_ACK;
 		}
 		msleep_interruptible(tdev->poll_interval_ms);
 	}
