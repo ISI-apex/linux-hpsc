@@ -847,6 +847,8 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 	else
 		addrcycles = curr_cmd->addr_cycles;
 
+	if (addrcycles > 0 && chip->chipsize <= (128 << 20))
+		addrcycles = 4;
 	cmd_phase_addr = (unsigned long __force)xnand->nand_base + (
 			 (addrcycles << ADDR_CYCLES_SHIFT)		|
 			 (end_cmd_valid << END_CMD_VALID_SHIFT)		|
@@ -876,6 +878,9 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 			cmd_data = cmd_data | (page_addr << 16);
 			pl35x_nand_write32(cmd_addr, cmd_data);
  			cmd_data = (page_addr >> 16);
+		} 
+		else {
+			cmd_data = cmd_data | (page_addr << 16);
 		}
         }
 	if (column != -1 && page_addr != -1) {
@@ -889,7 +894,7 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 			if (chip->chipsize > (128 << 20)) {
 				pl35x_nand_write32(cmd_addr, cmd_data);
 				cmd_data = (page_addr >> 16);
-			}
+			} 
 		} else {
 			cmd_data |= page_addr << 8;
 		}
@@ -897,9 +902,7 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 		/* Erase */
                 if (chip->chipsize > (128 << 20)) {
 			cmd_data = (page_addr >> 16);
-		} else {
-			cmd_data = page_addr;
-		}
+		} 
 	} else if (column != -1) {
 		/*
 		 * Change read/write column, read id etc
