@@ -167,8 +167,9 @@ int __cpu_up(unsigned int cpu, struct task_struct *idle)
 		 * CPU was successfully started, wait for it to come online or
 		 * time out.
 		 */
+		pr_info("CPU%u: waiting to come online\n", cpu);
 		wait_for_completion_timeout(&cpu_running,
-					    msecs_to_jiffies(1000));
+					    msecs_to_jiffies(20));
 
 		if (!cpu_online(cpu)) {
 			pr_crit("CPU%u: failed to come online\n", cpu);
