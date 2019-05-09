@@ -65,6 +65,16 @@
 #define PL353_SMC_ECC_MEMCFG_MODE_SHIFT	2
 #define PL353_SMC_ECC_MEMCFG_PGSIZE_MASK	0xC
 
+#define PL353_SMC_DC_CMD_addr_SHIFT		0
+#define PL353_SMC_DC_CMD_set_cre_SHIFT		20
+#define PL353_SMC_DC_CMD_cmd_type_SHIFT 	21
+#define PL353_SMC_DC_CMD_chip_nmbr_SHIFT	23
+
+#define PL353_SMC_CMD_TYPE_UpdateRegsAXI	0x0
+#define PL353_SMC_CMD_TYPE_ModeReg		0x1
+#define PL353_SMC_CMD_TYPE_UpdateRegs		0x2
+#define PL353_SMC_CMD_TYPE_ModeRegUpdateRegs	0x3
+
 #define PL353_SMC_DC_UPT_NAND_REGS	((4 << 23) |	/* CS: NAND chip */ \
 				 (2 << 21))	/* UpdateRegs operation */
 
@@ -78,6 +88,16 @@
 				 (0xE0 << 16) |	/* Read col change end cmd */ \
 				 (1 << 24)) /* Read col change end cmd valid */
 #define PL353_NAND_ECC_BUSY_TIMEOUT	(1 * HZ)
+
+#define PL353_OPMODE_SET_MW_SHIFT	 0
+#define PL353_OPMODE_WR_SYNC_SHIFT	 2
+#define PL353_OPMODE_RD_SYNC_SHIFT	 6
+#define PL353_OPMODE_SET_ADV_SHIFT	11
+
+#define PL353_SMC_MW_8_BIT	0b00
+#define PL353_SMC_MW_16_BIT	0b01
+#define PL353_SMC_MW_32_BIT	0b10
+
 /**
  * struct pl353_smc_data - Private smc driver structure
  * @memclk:		Pointer to the peripheral clock
@@ -302,6 +322,138 @@ static SIMPLE_DEV_PM_OPS(pl353_smc_dev_pm_ops, pl353_smc_suspend,
 			 pl353_smc_resume);
 
 /**
+ * pl353_smc_init_sram_interface - Initialize the NAND interface
+ * @pdev:	Pointer to the platform_device struct
+ * @nand_node:	Pointer to the pl35x_nand device_node struct
+ */
+static void pl353_smc_init_sram_interface(struct platform_device *pdev,
+				       struct device_node *sram_node)
+{
+	u32 t_rc, t_wc, t_rea, t_wp, t_clr, t_ar, t_rr;
+	u32 t_adv, t_wr_sync, t_rd_sync, t_mw;
+	u32 cre, ext_addr_bits, chip_nmbr;
+	int err, i;
+
+	/* sram-cycle-<X> property is refer to the SRAM timing
+	 * mapping between dts and the SRAM timing
+	 *  X  : AC timing name, (default value)
+	 *  t0 : t_rc	(10)
+	 *  t1 : t_wc	(10)
+	 *  t2 : t_rea	(1)
+	 *  t3 : t_wp	(1)
+	 *  t4 : t_clr	(1)
+	 *  t5 : t_ar	(1)
+	 *  t6 : t_rr	(0)
+	 */
+	err = of_property_read_u32(sram_node, "arm,sram-cycle-t0", &t_rc);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-cycle-t0 not in device tree, default value 10 is used");
+		t_rc = 10;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-cycle-t1", &t_wc);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-cycle-t1 not in device tree, default value 10 is used");
+		t_wc = 10;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-cycle-t2", &t_rea);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-cycle-t2 not in device tree, default value 1 is used");
+		t_rea = 1;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-cycle-t3", &t_wp);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-cycle-t3 not in device tree, default value 1 is used");
+		t_wp = 1;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-cycle-t4", &t_clr);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-cycle-t4 not in device tree, default value 1 is used");
+		t_clr = 1;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-cycle-t5", &t_ar);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-cycle-t5 not in device tree, default value 1 is used");
+		t_ar = 1;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-cycle-t6", &t_rr);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-cycle-t6 not in device tree, default value 0 is used");
+		t_rr = 0;
+	}
+	/* sram-<X> property is refer to the other SRAM timing
+	 * mapping between dts and the SRAM timing
+	 *  X  		: timing name	(default value)
+	 *  adv 	: t_adv			(1)
+	 *  wr_sync 	: t_wr_sync		(1)
+	 *  rd-sync 	: t_rd_sync		(1)
+	 *  mw 		: t_mw			(0x2)
+	 */
+	err = of_property_read_u32(sram_node, "arm,sram-adv", &t_adv);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-adv not in device tree, default value 1 is used");
+		t_adv = 1;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-wr-sync", &t_wr_sync);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-wr-sync not in device tree, default value 1 is used");
+		t_wr_sync = 1;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-rd-sync", &t_rd_sync);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-rd-sync not in device tree, default value 1 is used");
+		t_rd_sync = 1;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-mw", &t_mw);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-mw not in device tree, default value 0x2 is used, which is 32 bit");
+		t_mw = PL353_SMC_MW_32_BIT;
+	} else if (t_mw > 0x2) {
+		dev_warn(&pdev->dev, "arm,sram-mw value (0x%x) must be smaller than (0x3), default value 0x2 is used, which is 32 bit", t_mw);
+		t_mw = PL353_SMC_MW_32_BIT;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-chip-nmbr", &chip_nmbr);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-chip-nmbr not in device tree, default value 1 is used");
+		chip_nmbr = 1;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-cre", &cre);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-cre not in device tree, default value 1 is used");
+		cre = 1;
+	}
+	err = of_property_read_u32(sram_node, "arm,sram-ext-addr-bits", &ext_addr_bits);
+	if (err) {
+		dev_warn(&pdev->dev, "arm,sram-ext-addr-bits not in device tree, default value 0xb is used");
+		ext_addr_bits = 0xb;
+	}
+
+	/* set OPMODE */
+	writel((t_adv << PL353_OPMODE_SET_ADV_SHIFT) |
+		(t_rd_sync << PL353_OPMODE_RD_SYNC_SHIFT) |
+		(t_wr_sync << PL353_OPMODE_WR_SYNC_SHIFT) |
+		(t_mw << PL353_OPMODE_SET_MW_SHIFT)
+		, pl353_smc_base + PL353_SMC_SET_OPMODE_OFFS);
+
+	/* set cycles */
+        writel( (t_rc   & PL353_SMC_SET_CYCLES_T0_MASK) |
+		(t_wc  << PL353_SMC_SET_CYCLES_T1_SHIFT) |
+		(t_rea << PL353_SMC_SET_CYCLES_T2_SHIFT) |
+		(t_wp  << PL353_SMC_SET_CYCLES_T3_SHIFT) |
+		(t_clr << PL353_SMC_SET_CYCLES_T4_SHIFT) |
+		(t_ar  << PL353_SMC_SET_CYCLES_T5_SHIFT) |
+		(t_rr  << PL353_SMC_SET_CYCLES_T6_SHIFT)
+		, pl353_smc_base + PL353_SMC_SET_CYCLES_OFFS);
+
+	for (i = 0; i < chip_nmbr ; i++) {
+		writel( (cre << PL353_SMC_DC_CMD_set_cre_SHIFT) |
+			(i << PL353_SMC_DC_CMD_chip_nmbr_SHIFT) |
+			(PL353_SMC_CMD_TYPE_ModeRegUpdateRegs << PL353_SMC_DC_CMD_cmd_type_SHIFT) |
+			(ext_addr_bits << PL353_SMC_DC_CMD_addr_SHIFT)
+			, pl353_smc_base + PL353_SMC_DIRECT_CMD_OFFS);
+	}
+}
+
+/**
  * pl353_smc_init_nand_interface - Initialize the NAND interface
  * @adev: Pointer to the amba_device struct
  * @nand_node: Pointer to the pl353_nand device_node struct
@@ -343,6 +495,15 @@ static const struct of_device_id pl353_smc_supported_children[] = {
 		.compatible = "arm,pl353-nand-r2p1",
 		.data = pl353_smc_init_nand_interface
 	},
+	{
+        .compatible = "mmio-sram",
+		.data = pl353_smc_init_sram_interface
+    },
+	{}
+};
+
+static const struct of_device_id matches_sram[] = {
+	{ .compatible = "mmio-sram" },
 	{}
 };
 
