@@ -630,6 +630,7 @@
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
+#endif
 		smcc: smcc-memory-controller@f92d0000 {
 			#address-cells = <2>;
 			#size-cells = <2>; 
@@ -674,7 +675,6 @@
 				power-domains = <&pd_nand>;
 			};
 		};
-#endif
 	};
 
 	uart_clk: uart_clk {
