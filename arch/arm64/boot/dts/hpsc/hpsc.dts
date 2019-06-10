@@ -543,10 +543,10 @@
 				#address-cells = <0x2>; 
 				#size-cells = <0x2>; 
 			};
-			sram: sram@680000000 {
+			sram: sram@600000000 {
 				status = "okay";
 				compatible = "mmio-sram";
-				reg = <0x6 0x80000000 0x0 0x40000000>;
+				reg = <0x6 0x00000000 0x0 0x80000000>;
 
 				arm,sram-chip-nmbr = <1>;
 				arm,sram-mw = <0x2>; /* 32-bit width */
