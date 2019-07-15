@@ -34,9 +34,9 @@
 		#size-cells = <2>;
 		ranges;
 
-		ramoops@0x83200000 {
+		ramoops@0x87200000 {
 			compatible = "ramoops";
-			reg = <0x0 0x83200000 0x0 0x0400000>;
+			reg = <0x0 0x87200000 0x0 0x0400000>;
 			ftrace-size = <0x400000>;
 		};
 
@@ -44,23 +44,23 @@
 		/* reg = <0x0 0xbf800000 0x0 0x400000>; */
 		/* First part of the memory is for userspace */
 		/* outbound to TRCH */
-		shm_region0: shm@0x83600000 {
-			reg = <0x0 0x83600000 0x0 0x10000>;
+		shm_region0: shm@0x87600000 {
+			reg = <0x0 0x87600000 0x0 0x10000>;
 		};
 		/* inbound from TRCH */
-		shm_region1: shm@0x83610000 {
-			reg = <0x0 0x83610000 0x0 0x10000>;
+		shm_region1: shm@0x87610000 {
+			reg = <0x0 0x87610000 0x0 0x10000>;
 		};
 		/* currently unused */
-		shm_region2: shm@0x83620000 {
-			reg = <0x0 0x83620000 0x0 0x3d0000>;
+		shm_region2: shm@0x87620000 {
+			reg = <0x0 0x87620000 0x0 0x3d0000>;
 		};
 		/* Remaining part of the memory is for the kernel */
-		kshm_region_trch_in: kshm@0x839f0000 {
-			reg = <0x0 0x839f0000 0x0 0x08000>;
+		kshm_region_trch_in: kshm@0x879f0000 {
+			reg = <0x0 0x879f0000 0x0 0x08000>;
 		};
-		kshm_region_trch_out: kshm@0x839f8000 {
-			reg = <0x0 0x839f8000 0x0 0x08000>;
+		kshm_region_trch_out: kshm@0x879f8000 {
+			reg = <0x0 0x879f8000 0x0 0x08000>;
 		};
 	};
 
