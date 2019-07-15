@@ -207,28 +207,22 @@
 			     <GIC_PPI PPI_IRQ__TIMER_HYP  GIC_LVL_LO>;
 	};
 
-	amba_apu: amba_apu {
-		compatible = "simple-bus";
-		#address-cells = <2>;
-		#size-cells = <1>;
-		ranges = <0 0 0 0 0xffffffff>;
-
-		gic: interrupt-controller@f9000000 {
-			compatible = "arm,gic-v3"; 
-			#interrupt-cells = <3>;
-			#redistributor-regions = <1>;
-			reg = <0x0 0xf9000000 0x20000>,
-			      <0x0 0xf9100000 0x100000>;
-			interrupt-controller;
-			interrupts = <GIC_PPI PPI_IRQ__GIC_MAINT GIC_LVL_HI>;
-		};
-	};
-
 	amba: amba {
 		compatible = "simple-bus";
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
+
+		gic: interrupt-controller@f9000000 {
+			compatible = "arm,gic-v3"; 
+			reg = <0x0 0xf9000000 0x0 0x20000>,
+			      <0x0 0xf9100000 0x0 0x100000>;
+			interrupt-controller;
+			interrupts = <GIC_PPI PPI_IRQ__GIC_MAINT GIC_LVL_HI>;
+
+			#interrupt-cells = <3>;
+			#redistributor-regions = <1>;
+		};
 
 		eth: ethernet@0xe5300000 {
 			compatible = "cdns,gem";
