@@ -1,7 +1,5 @@
 /dts-v1/;
 
-#include <dt-bindings/phy/phy.h>
-
 /* Copies from Qemu Device Tree repo */
 #include "hpsc-irqs.dtsh"
 #include "hpsc-busids.dtsh"
@@ -23,8 +21,9 @@
 	#size-cells = <2>;
 
 	interrupt-parent = <&gic>;
+
 	aliases {
-		ethernet0 = &xgmac;
+		ethernet0 = &eth;
 	};
 
         /* NOTE: memory { } nodes appended by u-boot from its device tree */
@@ -232,28 +231,23 @@
 		#size-cells = <2>;
 		ranges;
 
-		xgmac: ethernet@0xe5300000 {
-			compatible = "cdns,zynqmp-gem";
+		eth: ethernet@0xe5300000 {
+			compatible = "cdns,gem";
+			reg = <0x0 0xe5300000 0x0 0x1000>;
+
 			status = "okay";
+
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__XGMAC      GIC_LVL_HI>,
                                      <GIC_SPI HPPS_IRQ__XGMAC_WAKE GIC_LVL_HI>;
-			reg = <0x0 0xe5300000 0x0 0x1000>;
+
 			clocks = <&clk125>, <&clk125>, <&clk125>;
 			clock-names = "pclk", "hclk", "tx_clk";
+
+			iommus = <&smmu MASTER_ID_XGMAC>;
+
 			#address-cells = <1>;
 			#size-cells = <0>;
-			iommus = <&smmu MASTER_ID_XGMAC>;
-			phy-handle = <&phy0>;
-			phy-mode = "rgmii-id";
-
-			phy0: phy@7 {
-				reg = <7>;
-				ti,rx-internal-delay = <0x8>;
-				ti,tx-internal-delay = <0xa>;
-				ti,fifo-depth = <0x1>;
-				ti,rxctrl-strap-worka;
-			};
 		};
 
 #if 0 /* TODO */
