@@ -250,42 +250,6 @@
 			#size-cells = <0>;
 		};
 
-#if 0 /* TODO */
-		pcie: pcie@0xe5330000 {
-			compatible = "xlnx,nwl-pcie-2.11";
-			status = "okay";
-			#address-cells = <3>;
-			#size-cells = <2>;
-			#interrupt-cells = <1>;
-			msi-controller;
-			device_type = "pci";
-			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI ? GIC_LVL_HI>,
-				     <GIC_SPI ? GIC_LVL_HI>,
-				     <GIC_SPI ? GIC_LVL_HI>,
-				     <GIC_SPI ? GIC_LVL_HI>,	/* MSI_1 [63...32] */
-				     <GIC_SPI ? GIC_LVL_HI>;	/* MSI_0 [31...0] */
-			interrupt-names = "misc","dummy","intx", "msi1", "msi0";
-			msi-parent = <&pcie>;
-			reg = <0x0 0xe5330000 0x0 0x1000>,
-			      <0x0 0xe53d0000 0x0 0x1000>,
-			      <0x80 0x00000000 0x0 0x1000000>;
-			reg-names = "breg", "pcireg", "cfg";
-			ranges = <0x02000000 0x00000000 0xe0000000 0x00000000 0xe0000000 0x00000000 0x10000000	/* non-prefetchable memory */
-				  0x43000000 0x00000006 0x00000000 0x00000006 0x00000000 0x00000002 0x00000000>;/* prefetchable memory */
-			interrupt-map-mask = <0x0 0x0 0x0 0x7>;
-			interrupt-map = <0x0 0x0 0x0 0x1 &pcie_intc 0x1>,
-					<0x0 0x0 0x0 0x2 &pcie_intc 0x2>,
-					<0x0 0x0 0x0 0x3 &pcie_intc 0x3>,
-					<0x0 0x0 0x0 0x4 &pcie_intc 0x4>;
-			pcie_intc: legacy-interrupt-controller {
-				interrupt-controller;
-				#address-cells = <0>;
-				#interrupt-cells = <1>;
-			};
-		};
-#endif
-
 		smmu: smmu@f9300000 {
 			compatible = "arm,mmu-500";
 			reg = <0x0 0xf9300000 0x0 0x20000>;
