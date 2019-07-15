@@ -596,6 +596,22 @@
 				status = "okay";
 				compatible = "mmio-sram";
 				reg = <0x6 0x80000000 0x0 0x40000000>;
+
+				arm,sram-chip-nmbr = <1>;
+				arm,sram-mw = <0x2>; /* 32-bit width */
+				arm,sram-wr-sync = <1>;
+				arm,sram-rd-sync = <1>;
+				arm,sram-cre= <1>;
+				arm,sram-adv = <1>;
+				arm,sram-ext-addr-bits= <0xb>;
+				arm,sram-cycle-t0 = <10>;
+				arm,sram-cycle-t1 = <10>;
+				arm,sram-cycle-t2 = <1>;
+				arm,sram-cycle-t3 = <1>;
+				arm,sram-cycle-t4 = <1>;
+				arm,sram-cycle-t5 = <1>;
+				arm,sram-cycle-t6 = <0>;
+
 				#address-cells = <0x2>; 
 				#size-cells = <0x1>; 
 			};
