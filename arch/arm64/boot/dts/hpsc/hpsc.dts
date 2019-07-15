@@ -200,11 +200,6 @@
 		};
 	};
 
-	dcc: dcc {
-		compatible = "arm,dcc";
-		status = "okay";
-	};
-
 	power-domains {
 		compatible = "xlnx,zynqmp-genpd";
 
