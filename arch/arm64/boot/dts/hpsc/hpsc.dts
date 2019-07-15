@@ -128,7 +128,6 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			reg = <0x0>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
 		cpul1: cpu@1 {
@@ -136,7 +135,6 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			reg = <0x1>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
 		cpul2: cpu@2 {
@@ -144,7 +142,6 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			reg = <0x2>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
 		cpul3: cpu@3 {
@@ -152,7 +149,6 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			reg = <0x3>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
 		cpub0: cpu@100 {
@@ -160,7 +156,6 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			reg = <0x100>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
 		cpub1: cpu@101 {
@@ -168,7 +163,6 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			reg = <0x101>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
 		cpub2: cpu@102 {
@@ -176,7 +170,6 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			reg = <0x102>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
 		cpub3: cpu@103 {
@@ -184,45 +177,8 @@
 			device_type = "cpu";
 			enable-method = "psci";
 			reg = <0x103>;
-			cpu-idle-states = <&CPU_SLEEP_0>;
 		};
 
-		idle-states {
-			entry-mehod = "arm,psci";
-
-			CPU_SLEEP_0: cpu-sleep-0 {
-				compatible = "arm,idle-state";
-				arm,psci-suspend-param = <0x40000000>;
-				local-timer-stop;
-				entry-latency-us = <300>;
-				exit-latency-us = <600>;
-				min-residency-us = <800000>;
-			};
-		};
-	};
-
-	power-domains {
-		compatible = "xlnx,zynqmp-genpd";
-
-		pd_uart0: pd-uart0 {
-			#power-domain-cells = <0x0>;
-			pd-id = <0x21>;
-		};
-
-		pd_xgmac: pd-xgmac {
-			#power-domain-cells = <0x0>;
-			pd-id = <0x1d>;
-		};
-
-		pd_nand: pd-nand {
-			#power-domain-cells = <0x0>;
-			pd-id = <0x2c>;
-		};
-
-		pd_pcie: pd-pcie {
-			#power-domain-cells = <0x0>;
-			pd-id = <0x3b>;
-		};
 	};
 
 	pmu {
@@ -294,7 +250,6 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			iommus = <&smmu MASTER_ID_XGMAC>;
-			power-domains = <&pd_xgmac>;
 			phy-handle = <&phy0>;
 			phy-mode = "rgmii-id";
 
@@ -335,7 +290,6 @@
 					<0x0 0x0 0x0 0x2 &pcie_intc 0x2>,
 					<0x0 0x0 0x0 0x3 &pcie_intc 0x3>,
 					<0x0 0x0 0x0 0x4 &pcie_intc 0x4>;
-			power-domains = <&pd_pcie>;
 			pcie_intc: legacy-interrupt-controller {
 				interrupt-controller;
 				#address-cells = <0>;
@@ -381,7 +335,6 @@
 			reg-shift = <2>;
 			clocks = <&uart_clk &uart_clk>;
 			clock-names = "uart_clk", "pclk";
-			power-domains = <&pd_uart0>;
 		};
 
 		trch_mbox: mailbox@0xfff50000 {
@@ -628,7 +581,6 @@
 				status = "okay";
 				compatible = "arm,pl353-nand-r2p1";
 				reg = <0x0 0x0 0x20000000>;
-				power-domains = <&pd_nand>;
 			};
 			nor0: flash@e2000000 {
 				status = "disabled";
@@ -639,7 +591,6 @@
 				status = "okay";
 				compatible = "mmio-sram";
 				reg = <0x6 0x80000000 0x40000000>;
-				power-domains = <&pd_nand>;
 			};
 		};
 	};
