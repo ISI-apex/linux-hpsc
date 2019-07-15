@@ -209,10 +209,6 @@
 			     <GIC_PPI PPI_IRQ__TIMER_HYP  GIC_LVL_LO>;
 	};
 
-	edac {
-		compatible = "arm,cortex-a53-edac";
-	};
-
 	amba_apu: amba_apu {
 		compatible = "simple-bus";
 		#address-cells = <2>;
