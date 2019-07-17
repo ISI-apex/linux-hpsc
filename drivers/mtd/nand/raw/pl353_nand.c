@@ -474,7 +474,7 @@ static int pl353_nand_read_oob(struct nand_chip *chip, int page)
 	struct mtd_info *mtd = nand_to_mtd(chip);
 	unsigned long nand_offset = (unsigned long __force)xnfc->regs;
 
-	chip->pagebuf = -1;
+	chip->pagecache.page = -1;
 	if (mtd->writesize < PL353_NAND_ECC_SIZE)
 		return 0;
 
@@ -516,7 +516,7 @@ static int pl353_nand_write_oob(struct nand_chip *chip, int page)
 	unsigned long nand_offset = (unsigned long __force)xnfc->regs;
 	u32 addrcycles = 0;
 
-	chip->pagebuf = -1;
+	chip->pagecache.page = -1;
 	addrcycles = xnfc->addr_cycles;
 	pl353_prepare_cmd(chip, page, mtd->writesize, NAND_CMD_SEQIN,
 			  NAND_CMD_PAGEPROG, 0);
