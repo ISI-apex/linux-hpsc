@@ -635,6 +635,12 @@
 				compatible = "cfi-flash";
 				reg = <0x1 0x0 0xE0000000>;
 			};
+			sram: sram@680000000 {
+				status = "okay";
+				compatible = "mmio-sram";
+				reg = <0x6 0x80000000 0x40000000>;
+				power-domains = <&pd_nand>;
+			};
 		};
 	};
 
