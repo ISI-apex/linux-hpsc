@@ -34,9 +34,9 @@
 		#size-cells = <2>;
 		ranges;
 
-		ramoops@0x83200000 {
+		ramoops@0xC3200000 {
 			compatible = "ramoops";
-			reg = <0x0 0x83200000 0x0 0x0400000>;
+			reg = <0x0 0xC3200000 0x0 0x0400000>;
 			ftrace-size = <0x400000>;
 		};
 
@@ -44,23 +44,23 @@
 		/* reg = <0x0 0xbf800000 0x0 0x400000>; */
 		/* First part of the memory is for userspace */
 		/* outbound to TRCH */
-		shm_region0: shm@0x83600000 {
-			reg = <0x0 0x83600000 0x0 0x10000>;
+		shm_region0: shm@0xC3600000 {
+			reg = <0x0 0xC3600000 0x0 0x10000>;
 		};
 		/* inbound from TRCH */
-		shm_region1: shm@0x83610000 {
-			reg = <0x0 0x83610000 0x0 0x10000>;
+		shm_region1: shm@0xC3610000 {
+			reg = <0x0 0xC3610000 0x0 0x10000>;
 		};
 		/* currently unused */
-		shm_region2: shm@0x83620000 {
-			reg = <0x0 0x83620000 0x0 0x3d0000>;
+		shm_region2: shm@0xC3620000 {
+			reg = <0x0 0xC3620000 0x0 0x3d0000>;
 		};
 		/* Remaining part of the memory is for the kernel */
-		kshm_region_trch_in: kshm@0x839f0000 {
-			reg = <0x0 0x839f0000 0x0 0x08000>;
+		kshm_region_trch_in: kshm@0xC39f0000 {
+			reg = <0x0 0xC39f0000 0x0 0x08000>;
 		};
-		kshm_region_trch_out: kshm@0x839f8000 {
-			reg = <0x0 0x839f8000 0x0 0x08000>;
+		kshm_region_trch_out: kshm@0xC39f8000 {
+			reg = <0x0 0xC39f8000 0x0 0x08000>;
 		};
 	};
 
@@ -268,12 +268,12 @@
 		#size-cells = <1>;
 		ranges = <0 0 0 0 0xffffffff>;
 
-		gic: interrupt-controller@f9000000 {
+		gic: interrupt-controller@e2c00000{
 			compatible = "arm,gic-v3"; 
 			#interrupt-cells = <3>;
 			#redistributor-regions = <1>;
-			reg = <0x0 0xf9000000 0x20000>,
-			      <0x0 0xf9100000 0x100000>;
+			reg = <0x0 0xe2c00000 0x20000>,
+			      <0x0 0xe2d00000 0x100000>;
 			interrupt-controller;
 			interrupts = <GIC_PPI PPI_IRQ__GIC_MAINT GIC_LVL_HI>;
 		};
@@ -285,13 +285,13 @@
 		#size-cells = <2>;
 		ranges;
 
-		xgmac: ethernet@0xe5300000 {
+		xgmac: ethernet@0xe0480000{
 			compatible = "cdns,zynqmp-gem";
 			status = "okay";
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__XGMAC      GIC_LVL_HI>,
                                      <GIC_SPI HPPS_IRQ__XGMAC_WAKE GIC_LVL_HI>;
-			reg = <0x0 0xe5300000 0x0 0x1000>;
+			reg = <0x0 0xe0480000 0x0 0x1000>;
 			clocks = <&clk125>, <&clk125>, <&clk125>;
 			clock-names = "pclk", "hclk", "tx_clk";
 			#address-cells = <1>;
@@ -347,9 +347,9 @@
 		};
 #endif
 
-		smmu: smmu@f9300000 {
+		smmu: smmu@e5000000{
 			compatible = "arm,mmu-500";
-			reg = <0x0 0xf9300000 0x0 0x20000>;
+			reg = <0x0 0xe5000000 0x0 0x20000>;
 			#iommu-cells = <1>;
 			#global-interrupts = <1>;
 			interrupt-parent = <&gic>;
@@ -373,13 +373,13 @@
                                 <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_15 GIC_LVL_HI>;
 		};
 
-		uart0: serial@f92c0000 {
+		uart0: serial@e0450000 {
 			compatible = "ns16550a";
 			/* compatible = "snps,dw-apb-uart"; */ /* TODO: fails with unassigned access */
 			status = "okay";
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__HPPS_UART0_0 GIC_LVL_HI>;
-			reg = <0x0 0xf92c0000 0x0 0x1000>;
+			reg = <0x0 0xe0450000 0x0 0x1000>;
 			current-speed = <125000>;
 			reg-shift = <2>;
 			clocks = <&uart_clk &uart_clk>;
@@ -387,9 +387,9 @@
 			power-domains = <&pd_uart0>;
 		};
 
-		trch_mbox: mailbox@0xfff50000 {
+		trch_mbox: mailbox@e0880000{
 			compatible = "hpsc,hpsc-mbox";
-                        reg = <0x0 0xfff50000 0x0 0x1000>;
+                        reg = <0x0 0xe0880000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 
 			/* Define all, but only two will be used, selected by
@@ -429,9 +429,9 @@
                                           if owner and, dest reg is set to this value) */
 		};
 
-		rtps_mbox: mailbox@0xfff60000 {
+		rtps_mbox: mailbox@e0890000 {
 			compatible = "hpsc,hpsc-mbox";
-                        reg = <0x0 0xfff60000 0x0 0x1000>;
+                        reg = <0x0 0xe0890000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__HR_MBOX_0  GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__HR_MBOX_1  GIC_LVL_HI>,
@@ -551,16 +551,16 @@
 				    <&trch_mbox  31     0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
 		};
 
-		hpps_wdt: wdt@0xfff70000 {
+		hpps_wdt: wdt@0xe08a0000{
 			compatible = "hpsc,hpsc-wdt";
-			reg = <0x0 0xfff70000 0x0 0x80000>;
+			reg = <0x0 0xe08a0000 0x0 0x80000>;
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_PPI PPI_IRQ__WDT GIC_LVL_HI>;
 		};
 
-		hpps_rti_tmr: hpsc-rti-tmr@0xfeed0000 {
+		hpps_rti_tmr: hpsc-rti-tmr@0xe0800000{
 			compatible = "hpsc,hpsc-rti-timer";
-			reg = <0x0 0xffed0000 0x0 0x80000>;
+			reg = <0x0 0xe0800000 0x0 0x80000>;
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_PPI PPI_IRQ__RTI_TIMER GIC_EDGE_RISE>;
 			#timer-cells = <1>; /* cpu index */
@@ -579,10 +579,10 @@
 				 <&hpps_rti_tmr 7>;
 		};
 
-		hpps_dma: dma-controller@0xf92e0000 {
+		hpps_dma: dma-controller@0xf7000000 {
 			#dma-cells = <1>;
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
-			reg = <0x0 0xf92e0000 0x0 0x1000>;
+			reg = <0x0 0xf7000000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__HPPS_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__HPPS_DMA_EV0   GIC_LVL_HI>;
@@ -591,10 +591,10 @@
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
 
-		srio0_dma: dma-controller@0xe5310000 {
+		srio0_dma: dma-controller@0xf6300000{
 			#dma-cells = <1>;
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
-			reg = <0x0 0xe5310000 0x0 0x1000>;
+			reg = <0x0 0xf6300000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__SRIO0_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__SRIO0_DMA_EV0   GIC_LVL_HI>;
@@ -603,10 +603,10 @@
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
 
-		srio1_dma: dma-controller@0xe5330000 {
+		srio1_dma: dma-controller@0xf6320000{
 			#dma-cells = <1>;
 			compatible = "arm,pl330", "arm,primecell"; /* primecell spec required */
-			reg = <0x0 0xe5330000 0x0 0x1000>;
+			reg = <0x0 0xf6320000 0x0 0x1000>;
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__SRIO1_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__SRIO1_DMA_EV0 GIC_LVL_HI>;
@@ -614,7 +614,7 @@
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
-		smcc: smcc-memory-controller@f92d0000 {
+		smcc_sram: smcc-sram@0xe0470000{
 			#address-cells = <2>;
 			#size-cells = <2>; 
 			status = "okay";
@@ -623,28 +623,34 @@
 			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
 			compatible = "arm,pl353-smc-r2p1";
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC GIC_LVL_HI>;
+			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC_SRAM GIC_LVL_HI>;
 			ranges ;
-			reg = <0x0 0xf92d0000 0x0 0x1000>;
-			nand0: nand0@680000000 {
+			reg = <0x0 0xe0470000 0x0 0x1000>;
+			sram: sram@300000000 {
 				status = "okay";
-				compatible = "arm,pl353-nand-r2p1";
-				reg = <0x6 0x80000000 0x0 0x20000000>;
+				compatible = "mmio-sram";
+				reg = <0x3 0x00000000 0x0 0x80000000>;
 				#address-cells = <0x2>; 
 				#size-cells = <0x1>; 
 				power-domains = <&pd_nand>;
 			};
-			nor0: flash@e2000000 {
-				status = "disabled";
-				compatible = "cfi-flash";
-				reg = <0x6 0x20000000 0x0 0xE0000000>;
-				#address-cells = <0x2>; 
-				#size-cells = <0x2>; 
-			};
-			sram: sram@600000000 {
+		};
+		smcc_nand: smcc-nand@0xe0460000{
+			#address-cells = <2>;
+			#size-cells = <2>; 
+			status = "okay";
+			clocks = <&clk100>, <&clk125>;
+			clock-names = "aclk", "memclk";
+			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
+			compatible = "arm,pl353-smc-r2p1";
+			interrupt-parent = <&gic>;
+			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC_NAND GIC_LVL_HI>;
+			ranges ;
+			reg = <0x0 0xe0460000 0x0 0x1000>;
+			nand0: nand0@380000000 {
 				status = "okay";
-				compatible = "mmio-sram";
-				reg = <0x6 0x00000000 0x0 0x80000000>;
+				compatible = "arm,pl353-nand-r2p1";
+				reg = <0x0 0xe8000000 0x0 0x1000000>;
 				#address-cells = <0x2>; 
 				#size-cells = <0x1>; 
 				power-domains = <&pd_nand>;
