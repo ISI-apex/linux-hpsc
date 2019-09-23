@@ -6,6 +6,9 @@
 
 #include "mailbox-map.h" /* same file also present in other subsystems */
 
+#define SMP 0
+#define CLUSTER1 0
+
 #define GIC_SPI 0
 #define GIC_PPI 1
 #define GIC_EDGE_RISE 1
@@ -99,6 +102,7 @@
 				core0 {
 					cpu = <&cpul0>;
 				};
+#if SMP
 				core1 {
 					cpu = <&cpul1>;
 				};
@@ -108,8 +112,9 @@
 				core3 {
 					cpu = <&cpul3>;
 				};
+#endif
 			};
-#if 0
+#if SMP && CLUSTER1
 			cluster1 {
 				core0 {
 					cpu = <&cpub0>;
@@ -134,6 +139,7 @@
 			reg = <0x0>;
 		};
 
+#if SMP
 		cpul1: cpu@1 {
 			compatible = "arm,cortex-a53", "arm,armv8";
 			device_type = "cpu";
@@ -154,8 +160,9 @@
 			enable-method = "psci";
 			reg = <0x3>;
 		};
+#endif
 
-#if 0
+#if SMP && CLUSTER1
 		cpub0: cpu@100 {
 			compatible = "arm,cortex-a53", "arm,armv8";
 			device_type = "cpu";
