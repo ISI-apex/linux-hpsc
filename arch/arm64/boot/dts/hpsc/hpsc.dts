@@ -521,14 +521,6 @@
 			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC GIC_LVL_HI>;
 			ranges ;
 			reg = <0x0 0xf92d0000 0x0 0x1000>;
-			sram: sram@600000000 {
-				status = "okay";
-				compatible = "mmio-sram";
-				reg = <0x6 0x00000000 0x0 0x80000000>;
-				#address-cells = <0x2>;
-				#size-cells = <0x1>;
-				power-domains = <&pd_nand>;
-			};
 			nand0: nand0@680000000 {
 				status = "okay";
 				compatible = "arm,pl353-nand-r2p1";
