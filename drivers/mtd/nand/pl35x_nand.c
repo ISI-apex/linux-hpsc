@@ -60,6 +60,7 @@
 #define PL35X_NAND_DEV_BUSY_TIMEOUT	(1 * HZ)
 #define PL35X_NAND_LAST_TRANSFER_LENGTH	4
 
+#define TEST_NONE_ECC
 /* Inline function for the NAND controller register write */
 static inline void pl35x_nand_write32(void __iomem *addr, u32 val)
 {
@@ -270,6 +271,9 @@ static struct nand_bbt_descr bbt_mirror_descr = {
 static int pl35x_nand_calculate_hwecc(struct mtd_info *mtd,
 				const u8 *data, u8 *ecc_code)
 {
+#ifdef TEST_NONE_ECC
+        return 0;
+#endif
 	u32 ecc_value, ecc_status;
 	u8 ecc_reg, ecc_byte;
 	unsigned long timeout = jiffies + PL35X_NAND_ECC_BUSY_TIMEOUT;
@@ -337,6 +341,9 @@ static int pl35x_nand_correct_data(struct mtd_info *mtd, unsigned char *buf,
 				unsigned char *read_ecc,
 				unsigned char *calc_ecc)
 {
+#ifdef TEST_NONE_ECC
+        return 0;
+#endif
 	unsigned char bit_addr;
 	unsigned int byte_addr;
 	unsigned short ecc_odd, ecc_even, read_ecc_lower, read_ecc_upper;
@@ -976,7 +983,6 @@ static void pl35x_nand_write_buf(struct mtd_info *mtd, const uint8_t *buf,
 	unsigned int *ptr = (unsigned int *)buf;
 
 	len >>= 2;
-
 	for (i = 0; i < len; i++)
 		writel(ptr[i], chip->IO_ADDR_W);
 }
@@ -1075,7 +1081,6 @@ static void pl35x_nand_ecc_init(struct mtd_info *mtd, struct nand_ecc_ctrl *ecc,
 	ecc->strength = 1;
 	ecc->write_oob = pl35x_nand_write_oob;
 	ecc->write_page_raw = pl35x_nand_write_page_raw;
-
 	if (ondie_ecc_state) {
 		/* bypass the controller ECC block */
 		pl35x_smc_set_ecc_mode(PL35X_SMC_ECCMODE_BYPASS);
