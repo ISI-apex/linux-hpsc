@@ -568,7 +568,7 @@
 			ranges ;
 
 			/* TODO: support more than one memory chip */
-			nand0@fb0000000 {
+			nand0@fb000000 {
 				compatible = "arm,pl353-nand-r2p1";
 				reg = <0x0 0xfb000000 0x0 0x1000000>;
 
