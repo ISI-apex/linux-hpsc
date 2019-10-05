@@ -571,8 +571,15 @@
 				arm,sram-cycle-t5 = <1>;
 				arm,sram-cycle-t6 = <0>;
 			};
+			nand0@680000000 {
+				compatible = "arm,pl353-nand-r2p1";
+				reg = <0x6 0x80000000 0x2 0x0000000>;
+
+				status = "okay";
+			};
 		};
 
+#if 0
 		smc_nand: smc@f9400000 {
 			compatible = "arm,pl353-smc-r2p1";
 			reg = <0x0 0xf9400000 0x0 0x1000>;
@@ -607,6 +614,7 @@
 				arm,nand-cycle-t6 = <0x4>;
 			};
 		};
+#endif
 	};
 
 	uart_clk: uart_clk {
