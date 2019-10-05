@@ -548,40 +548,11 @@
 				arm,sram-cycle-t5 = <1>;
 				arm,sram-cycle-t6 = <0>;
 			};
-		};
-
-		smc_nand: smc@f9400000 {
-			compatible = "arm,pl353-smc-r2p1";
-			reg = <0x0 0xf9400000 0x0 0x1000>;
-			status = "okay";
-
-			clocks = <&clk100>, <&clk125>;
-			clock-names = "aclk", "memclk";
-
-			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC_NAND GIC_LVL_HI>;
-
-			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
-
-			#address-cells = <2>;
-			#size-cells = <2>;
-			ranges ;
-
-			/* TODO: support more than one memory chip */
-			nand0@fb000000 {
+			nand0@680000000 {
 				compatible = "arm,pl353-nand-r2p1";
-				reg = <0x0 0xfb000000 0x0 0x1000000>;
+				reg = <0x6 0x80000000 0x0 0x1000000>;
 
 				status = "okay";
-
-				/* 2Gb Numonyx MT29F2G08ABAEAWP NAND flash */
-				arm,nand-cycle-t0 = <0x4>;
-				arm,nand-cycle-t1 = <0x4>;
-				arm,nand-cycle-t2 = <0x1>;
-				arm,nand-cycle-t3 = <0x2>;
-				arm,nand-cycle-t4 = <0x2>;
-				arm,nand-cycle-t5 = <0x2>;
-				arm,nand-cycle-t6 = <0x4>;
 			};
 		};
 	};
