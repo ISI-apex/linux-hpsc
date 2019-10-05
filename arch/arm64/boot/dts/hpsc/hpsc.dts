@@ -532,39 +532,31 @@
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
 #endif
-		smcc: smcc-memory-controller@f92d0000 {
-			#address-cells = <2>;
-			#size-cells = <2>; 
+		smc_sram: smc@f92d0000 {
+			compatible = "arm,pl353-smc-r2p1";
+			reg = <0x0 0xf92d0000 0x0 0x1000>;
 			status = "okay";
+
 			clocks = <&clk100>, <&clk125>;
 			clock-names = "aclk", "memclk";
-			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
-			compatible = "arm,pl353-smc-r2p1";
+
 			interrupt-parent = <&gic>;
-			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC GIC_LVL_HI>;
+			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC_SRAM GIC_LVL_HI>;
+
+			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
+
+			#address-cells = <2>;
+			#size-cells = <2>;
 			ranges ;
-			reg = <0x0 0xf92d0000 0x0 0x1000>;
-			nand0: nand0@680000000 {
-				status = "okay";
-				compatible = "arm,pl353-nand-r2p1";
-				reg = <0x6 0x80000000 0x0 0x20000000>;
-				#address-cells = <0x2>; 
-				#size-cells = <0x1>; 
-			};
-			nor0: flash@e2000000 {
-				status = "disabled";
-				compatible = "cfi-flash";
-				reg = <0x6 0xa0000000 0x0 0x60000000>;
-				#address-cells = <0x2>; 
-				#size-cells = <0x2>; 
-			};
-			sram: sram@600000000 {
-				status = "okay";
 
+			sram@600000000 {
 				compatible = "mmio-sram";
-				reg = <0x6 0x00000000 0x0 0x80000000>;
+				reg = <0x6 0x00000000 0x1 0x00000000>;
 
-				arm,sram-chip-nmbr = <1>;
+				status = "okay";
+
+				arm,sram-chip-nmbr = <4>;
+
 				arm,sram-mw = <0x2>; /* 32-bit width */
 				arm,sram-wr-sync = <1>;
 				arm,sram-rd-sync = <1>;
@@ -578,9 +570,41 @@
 				arm,sram-cycle-t4 = <1>;
 				arm,sram-cycle-t5 = <1>;
 				arm,sram-cycle-t6 = <0>;
+			};
+		};
 
-				#address-cells = <0x2>; 
-				#size-cells = <0x1>; 
+		smc_nand: smc@f9400000 {
+			compatible = "arm,pl353-smc-r2p1";
+			reg = <0x0 0xf9400000 0x0 0x1000>;
+			status = "okay";
+
+			clocks = <&clk100>, <&clk125>;
+			clock-names = "aclk", "memclk";
+
+			interrupt-parent = <&gic>;
+			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC_NAND GIC_LVL_HI>;
+
+			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
+
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges ;
+
+			/* TODO: support more than one memory chip */
+			nand0@fb000000 {
+				compatible = "arm,pl353-nand-r2p1";
+				reg = <0x0 0xfb000000 0x0 0x1000000>;
+
+				status = "okay";
+
+				/* 2Gb Numonyx MT29F2G08ABAEAWP NAND flash */
+				arm,nand-cycle-t0 = <0x4>;
+				arm,nand-cycle-t1 = <0x4>;
+				arm,nand-cycle-t2 = <0x1>;
+				arm,nand-cycle-t3 = <0x2>;
+				arm,nand-cycle-t4 = <0x2>;
+				arm,nand-cycle-t5 = <0x2>;
+				arm,nand-cycle-t6 = <0x4>;
 			};
 		};
 	};
