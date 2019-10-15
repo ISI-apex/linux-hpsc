@@ -28,6 +28,10 @@ struct nand_flash_dev nand_flash_ids[] = {
 	 * listed by full ID. We list them first so that we can easily identify
 	 * the most specific match.
 	 */
+	{"AMD/Spansion NAND 4Gb 1.8V 16-bit, 128B OOB",
+
+		{ .id = {0x01, 0xbc, 0x90, 0x55, 0x56, 0x00, 0x01, 0xbc} },
+		  SZ_2K, SZ_512, SZ_128K, LP_OPTIONS16, 6, 128, NAND_ECC_INFO(1, SZ_512) },
 	{"TC58NVG0S3E 1G 3.3V 8-bit",
 		{ .id = {0x98, 0xd1, 0x90, 0x15, 0x76, 0x14, 0x01, 0x00} },
 		  SZ_2K, SZ_128, SZ_128K, 0, 8, 64, NAND_ECC_INFO(1, SZ_512),
