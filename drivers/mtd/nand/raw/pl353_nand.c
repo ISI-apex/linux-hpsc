@@ -66,6 +66,8 @@
 #define PL353_MAX_ECC_CHUNKS		4
 #define PL353_MAX_ECC_BYTES		3
 
+#define TEST_NONE_ECC
+
 struct pl353_nfc_op {
 	u32 cmnds[4];
 	u32 end_cmd;
@@ -325,6 +327,9 @@ static int pl353_wait_for_ecc_done(void)
 static int pl353_nand_calculate_hwecc(struct nand_chip *chip,
 				      const u8 *data, u8 *ecc)
 {
+#ifdef TEST_NONE_ECC
+	return 0;
+#endif
 	u32 ecc_value;
 	u8 chunk, ecc_byte, ecc_status;
 
@@ -368,6 +373,9 @@ static int pl353_nand_correct_data(struct nand_chip *chip, unsigned char *buf,
 				   unsigned char *read_ecc,
 				   unsigned char *calc_ecc)
 {
+#ifdef TEST_NONE_ECC
+	return 0;
+#endif
 	unsigned char bit_addr;
 	unsigned int byte_addr;
 	unsigned short ecc_odd, ecc_even, read_ecc_lower, read_ecc_upper;
