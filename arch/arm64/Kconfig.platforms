@@ -271,7 +271,7 @@ config ARCH_ZYNQMP
 config ARCH_HPSC
 	bool "HPSC Chiplet"
 	imply HPSC_MBOX
-	select HPSC_WDT
+	imply HPSC_WDT
 	help
 	  This enables support for the HPSC Chiplet
 
