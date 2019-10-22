@@ -1,6 +1,46 @@
 menu "HPSC Chiplet SoC drivers"
 	depends on ARCH_HPSC
 
+config HPSC_MSG
+	tristate "HPSC messaging interface into the kernel"
+	default y
+	help
+	  An interface into the kernel from other HPSC Chiplet subsystems
+	  used for system management.
+
+	  Notifications go out on this interface in response to kernel events
+	  (e.g. shutdown), and requests received on this interfaces are handled
+	  by the kernel. One or more transport backend for the interface (e.g.
+	  mailbox, shared memory) should be enabled.
+
+	  Say Y if unsure.
+
+if HPSC_MSG
+
+config HPSC_MSG_TP_MBOX
+	tristate "HPSC Mailbox transport for kernel messaging interface"
+	default y
+	depends on OF && HPSC_MBOX
+	help
+	  A transport backend for the HPSC kernel messaging interface
+	  implemented using a pair of HPSC Chiplet hardware mailboxes bound in
+	  the device tree node for this transport.
+
+	  Say Y if unsure.
+
+config HPSC_MSG_TP_SHMEM
+	tristate "HPSC Shared Memory transport for kernel messaging interface"
+	default y
+	depends on OF && OF_ADDRESS
+	help
+	  A transport backend for the HPSC kernel messaging interface
+	  implemented using shared memory regions bound in the device tree node
+	  for this transport.
+
+	  Say Y if unsure.
+
+endif # HPSC_MSG
+
 config HPSC_MBOX_USERSPACE
 	tristate "HPSC Mailbox Userspace Interface"
 	default y
@@ -10,16 +50,6 @@ config HPSC_MBOX_USERSPACE
 	  through device files. Say Y here if you want to enable userspace
 	  mailbox support for the HPSC Chiplet.
 
-config HPSC_MBOX_KERNEL
-	tristate "HPSC Mailbox In-kernel Interface"
-	default y
-	depends on OF && HPSC_MBOX
-	help
-	  A mailbox client that exposes the HPSC mailbox hardware to other
-	  kernel components. This interface is used for system management. Say
-	  Y here if you want to enable in-kernel mailbox support for the HPSC
-	  Chiplet.
-
 config HPSC_SHMEM
 	tristate "HPSC Shared Memory Interface"
 	default y
@@ -28,14 +58,5 @@ config HPSC_SHMEM
 	  A device file interface to mmap shared memory with other HPSC
 	  Chiplet subsystems. Say Y here if you want to enable hpsc_shmem
 	  device files for use with mmap.
-
-config HPSC_KSHMEM
-	tristate "HPSC Shared Memory In-kernel Interface"
-	default y
-	depends on OF && OF_ADDRESS
-	help
-	  A shared memory interface for in-kernel message exchange with other
-	  HPSC subsystems. Say Y here if you want to enable in-kernel shared
-	  memory support for the HPSC Chiplet.
 
 endmenu

@@ -1,5 +1,7 @@
 /*
- * HPSC in-kernel mailbox client for exchanging systems messages.
+ * A backend transport for the kernel messaging interface implemented using a
+ * pair of hardware mailboxes in the HPSC Chiplet IP.
+ *
  * Exactly two mailboxes are reserved in the device tree for this module.
  * The first is for outbound messages, the second is for inbound messages.
  */
@@ -49,7 +51,7 @@ static void client_tx_done(struct mbox_client *cl, void *msg, int r)
 	atomic_set(&cdev->send_ready, true);
 }
 
-static int hpsc_mbox_kernel_send(struct notifier_block *nb,
+static int hpsc_msg_tp_mbox_send(struct notifier_block *nb,
 				 unsigned long action, void *msg)
 {
 	struct mbox_client_dev *tdev = container_of(nb, struct mbox_client_dev,
@@ -109,7 +111,7 @@ static int hpsc_mbox_chan_open(struct mbox_client_dev *tdev, int i)
 	return 0;
 }
 
-static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
+static int hpsc_msg_tp_mbox_probe(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev;
 	int ret;
@@ -121,7 +123,7 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	tdev->dev = &pdev->dev;
 	platform_set_drvdata(pdev, tdev);
 
-	tdev->nb.notifier_call = hpsc_mbox_kernel_send;
+	tdev->nb.notifier_call = hpsc_msg_tp_mbox_send;
 	tdev->nb.priority = HPSC_NOTIF_PRIORITY_MAILBOX;
 
 	// verify channel configuration in device tree
@@ -146,7 +148,7 @@ static int hpsc_mbox_kernel_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int hpsc_mbox_kernel_remove(struct platform_device *pdev)
+static int hpsc_msg_tp_mbox_remove(struct platform_device *pdev)
 {
 	struct mbox_client_dev *tdev = platform_get_drvdata(pdev);
 	int i;
@@ -157,22 +159,22 @@ static int hpsc_mbox_kernel_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id hpsc_mbox_kernel_match[] = {
-	{ .compatible = "hpsc-mbox-kernel" },
+static const struct of_device_id hpsc_msg_tp_mbox_match[] = {
+	{ .compatible = "hpsc-msg-transport,mbox" },
 	{},
 };
 
-static struct platform_driver hpsc_mbox_kernel_driver = {
+static struct platform_driver hpsc_msg_tp_mbox_driver = {
 	.driver = {
-		.name = "hpsc_mbox_kernel",
-		.of_match_table = hpsc_mbox_kernel_match,
+		.name = "hpsc_msg_tp_mbox",
+		.of_match_table = hpsc_msg_tp_mbox_match,
 	},
-	.probe  = hpsc_mbox_kernel_probe,
-	.remove = hpsc_mbox_kernel_remove,
+	.probe  = hpsc_msg_tp_mbox_probe,
+	.remove = hpsc_msg_tp_mbox_remove,
 };
-module_platform_driver(hpsc_mbox_kernel_driver);
+module_platform_driver(hpsc_msg_tp_mbox_driver);
 
-MODULE_DESCRIPTION("HPSC mailbox in-kernel interface");
+MODULE_DESCRIPTION("HPSC Mailbox transport for kernel messaging interface");
 MODULE_AUTHOR("Connor Imes <cimes@isi.edu>");
 MODULE_AUTHOR("Alexei Colin <acolin@isi.edu>");
 MODULE_LICENSE("GPL v2");

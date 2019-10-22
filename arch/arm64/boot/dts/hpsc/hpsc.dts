@@ -58,14 +58,17 @@
 		shm_region2: shm@0x87620000 {
 			reg = <0x0 0x87620000 0x0 0x3d0000>;
 		};
+#endif /* CONFIG_SHMEM */
+
 		/* Remaining part of the memory is for the kernel */
-		kshm_region_trch_in: kshm@0x879f0000 {
+#if CONFIG_HPSC_MSG_TP_SHMEM
+		hpsc_msg_region_trch_in: kshm@0x879f0000 {
 			reg = <0x0 0x879f0000 0x0 0x08000>;
 		};
-		kshm_region_trch_out: kshm@0x879f8000 {
+		hpsc_msg_region_trch_out: kshm@0x879f8000 {
 			reg = <0x0 0x879f8000 0x0 0x08000>;
 		};
-#endif /* CONFIG_SHMEM */
+#endif /* CONFIG_HPSC_MSG_TP_SHMEM */
 	};
 
 #if CONFIG_SHMEM
@@ -84,13 +87,25 @@
 		region-name = "region2";
 		memory-region = <&shm_region2>;
 	};
-	kshm_trch {
-		compatible = "hpsc-kshmem";
-		poll-interval-ms = <100>;
-		memory-region-in = <&kshm_region_trch_in>;
-		memory-region-out = <&kshm_region_trch_out>;
-	};
 #endif /* CONFIG_SHMEM */
+
+#if CONFIG_HPSC_MSG_TP_SHMEM
+	hpsc_msg_tp_shmem@trch {
+		compatible = "hpsc-msg-transport,shmem";
+		poll-interval-ms = <100>;
+		memory-region-in = <&hpsc_msg_region_trch_in>;
+		memory-region-out = <&hpsc_msg_region_trch_out>;
+	};
+#endif /* CONFIG_MSG_TP_SHMEM */
+
+#if CONFIG_HPSC_MSG_TP_MBOX /* requires CONFIG_MAILBOXES, or will throw error */
+	hpsc_msg_tp_mbox@trch {
+		compatible = "hpsc-msg-transport,mbox";
+		mboxes =  /* ip block, instance index, owner, src, dest */
+		    <&trch_mbox  30 0 MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
+		    <&trch_mbox  31 0 MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
+	};
+#endif /* CONFIG_HPSC_MSG_TP_MBOX */
 
 	cpus {
 		#address-cells = <1>;
@@ -495,13 +510,6 @@
 				    <&rtps_mbox  29     0                    0 0>,
 				    <&rtps_mbox  30     0                    0 0>,
 				    <&rtps_mbox  31     0                    0 0>;
-		};
-
-		mailbox_kernel {
-			compatible = "hpsc-mbox-kernel";
-			mboxes =  /* ip block, instance index, owner, src, dest */
-				    <&trch_mbox  30     0  MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
-				    <&trch_mbox  31     0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
 		};
 #endif /* CONFIG_MAILBOXES */
 
