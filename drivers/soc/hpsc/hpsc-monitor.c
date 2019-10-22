@@ -95,8 +95,7 @@ static int __init hpsc_monitor_init(void)
 	// failure is ok - the HW watchdog will reset us eventually
 	if (watchdog_pretimeout_notifier_register(&hpsc_monitor_wdt_nb))
 		pr_warn("hpsc-monitor: failed to register watchdog notifier - "
-			"'CONFIG_WATCHDOG_PRETIMEOUT_DEFAULT_GOV_NOTIFIER' "
-			"not set?");
+			"'CONFIG_WATCHDOG_PRETIMEOUT_GOV_NOTIFIER' not set?");
 #if 0	// test oops
 	*(int*)0 = 0;
 #endif
