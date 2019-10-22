@@ -1,5 +1,7 @@
 /*
- * HPSC in-kernel shared memory module.
+ * A backend transport for the kernel messaging interface implemented using
+ * shared memory regions.
+ *
  * Memory regions should be reserved physical addresses with fixed size.
  */
 #include <linux/delay.h>
@@ -25,7 +27,7 @@ struct hpsc_shmem_region {
 	u32 status;
 };
 
-struct hpsc_kshmem_dev {
+struct hpsc_msg_tp_shmem_dev {
 	struct device			*dev;
 	spinlock_t			lock;
 	struct hpsc_shmem_region	*in;
@@ -40,10 +42,10 @@ static bool is_new(struct hpsc_shmem_region *reg)
 	return reg->status & HPSC_SHMEM_STATUS_BIT_NEW;
 }
 
-static int hpsc_kshmem_send(struct notifier_block *nb, unsigned long action,
+static int hpsc_msg_tp_shmem_send(struct notifier_block *nb, unsigned long action,
 			    void *msg)
 {
-	struct hpsc_kshmem_dev *tdev = container_of(nb, struct hpsc_kshmem_dev,
+	struct hpsc_msg_tp_shmem_dev *tdev = container_of(nb, struct hpsc_msg_tp_shmem_dev,
 						    nb);
 	int ret = NOTIFY_STOP;
 	dev_info(tdev->dev, "send\n");
@@ -59,12 +61,12 @@ static int hpsc_kshmem_send(struct notifier_block *nb, unsigned long action,
 	return ret;
 }
 
-static int hpsc_kshmem_recv(void *arg)
+static int hpsc_msg_tp_shmem_recv(void *arg)
 {
-	struct hpsc_kshmem_dev *tdev = (struct hpsc_kshmem_dev *) arg;
+	struct hpsc_msg_tp_shmem_dev *tdev = (struct hpsc_msg_tp_shmem_dev *) arg;
 	while (!kthread_should_stop()) {
 		if (is_new(tdev->in)) {
-			dev_info(tdev->dev, "hpsc_kshmem_recv\n");
+			dev_info(tdev->dev, "hpsc_msg_tp_shmem_recv\n");
 			// don't really care if processing fails...
 			hpsc_notif_recv(tdev->in->data, HPSC_MSG_SIZE);
 			tdev->in->status &= ~HPSC_SHMEM_STATUS_BIT_NEW;
@@ -75,7 +77,7 @@ static int hpsc_kshmem_recv(void *arg)
 	return 0;
 }
 
-static int hpsc_kshmem_parse_dt_mreg(struct hpsc_kshmem_dev *tdev,
+static int hpsc_msg_tp_shmem_parse_dt_mreg(struct hpsc_msg_tp_shmem_dev *tdev,
 				     const char *name,
 				     struct hpsc_shmem_region **reg)
 {
@@ -111,7 +113,7 @@ static int hpsc_kshmem_parse_dt_mreg(struct hpsc_kshmem_dev *tdev,
 	return 0;
 }
 
-static int hpsc_kshmem_parse_dt(struct hpsc_kshmem_dev *tdev)
+static int hpsc_msg_tp_shmem_parse_dt(struct hpsc_msg_tp_shmem_dev *tdev)
 {
 	// get interval for polling inbound region
 	int ret = of_property_read_u32(tdev->dev->of_node, "poll-interval-ms",
@@ -121,13 +123,13 @@ static int hpsc_kshmem_parse_dt(struct hpsc_kshmem_dev *tdev)
 		return ret;
 	}
 	// now parse memory regions
-	return hpsc_kshmem_parse_dt_mreg(tdev, "memory-region-in", &tdev->in) ||
-	       hpsc_kshmem_parse_dt_mreg(tdev, "memory-region-out", &tdev->out);
+	return hpsc_msg_tp_shmem_parse_dt_mreg(tdev, "memory-region-in", &tdev->in) ||
+	       hpsc_msg_tp_shmem_parse_dt_mreg(tdev, "memory-region-out", &tdev->out);
 }
 
-static int hpsc_kshmem_probe(struct platform_device *pdev)
+static int hpsc_msg_tp_shmem_probe(struct platform_device *pdev)
 {
-	struct hpsc_kshmem_dev *tdev;
+	struct hpsc_msg_tp_shmem_dev *tdev;
 	int ret;
 
 	dev_info(&pdev->dev, "probe\n");
@@ -138,17 +140,17 @@ static int hpsc_kshmem_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, tdev);
 
 	spin_lock_init(&tdev->lock);
-	ret = hpsc_kshmem_parse_dt(tdev);
+	ret = hpsc_msg_tp_shmem_parse_dt(tdev);
 	if (ret)
 		return ret;
 
 	// Must register with notif handler before starting the receiver thread.
 	// Receiving messages can result in a synchronous reply, and we must be
 	// registered for that reply to be sent.
-	tdev->nb.notifier_call = hpsc_kshmem_send;
+	tdev->nb.notifier_call = hpsc_msg_tp_shmem_send;
 	tdev->nb.priority = HPSC_NOTIF_PRIORITY_SHMEM;
 	hpsc_notif_register(&tdev->nb);
-	tdev->t = kthread_run(hpsc_kshmem_recv, tdev, "hpsc_kshmem");
+	tdev->t = kthread_run(hpsc_msg_tp_shmem_recv, tdev, "hpsc_msg_tp_shmem");
 	if (IS_ERR(tdev->t)) {
 		dev_err(tdev->dev, "kthread_run failed\n");
 		hpsc_notif_unregister(&tdev->nb);
@@ -158,9 +160,9 @@ static int hpsc_kshmem_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int hpsc_kshmem_remove(struct platform_device *pdev)
+static int hpsc_msg_tp_shmem_remove(struct platform_device *pdev)
 {
-	struct hpsc_kshmem_dev *tdev = platform_get_drvdata(pdev);
+	struct hpsc_msg_tp_shmem_dev *tdev = platform_get_drvdata(pdev);
 	int ret;
 	dev_info(tdev->dev, "remove\n");
 	ret = kthread_stop(tdev->t);
@@ -168,21 +170,22 @@ static int hpsc_kshmem_remove(struct platform_device *pdev)
 	return ret;
 }
 
-static const struct of_device_id hpsc_kshmem_match[] = {
-	{ .compatible = "hpsc-kshmem" },
+static const struct of_device_id hpsc_msg_tp_shmem_match[] = {
+	{ .compatible = "hpsc-msg-transport,shmem" },
 	{},
 };
 
-static struct platform_driver hpsc_kshmem_driver = {
+static struct platform_driver hpsc_msg_tp_shmem_driver = {
 	.driver = {
-		.name = "hpsc_kshmem",
-		.of_match_table = hpsc_kshmem_match,
+		.name = "hpsc_msg_tp_shmem",
+		.of_match_table = hpsc_msg_tp_shmem_match,
 	},
-	.probe  = hpsc_kshmem_probe,
-	.remove = hpsc_kshmem_remove,
+	.probe  = hpsc_msg_tp_shmem_probe,
+	.remove = hpsc_msg_tp_shmem_remove,
 };
-module_platform_driver(hpsc_kshmem_driver);
+module_platform_driver(hpsc_msg_tp_shmem_driver);
 
-MODULE_DESCRIPTION("HPSC shared memory in-kernel interface");
+MODULE_DESCRIPTION("Shared Memory transport for "
+		   "HPSC kernel messaging interface");
 MODULE_AUTHOR("Connor Imes <cimes@isi.edu>");
 MODULE_LICENSE("GPL v2");
