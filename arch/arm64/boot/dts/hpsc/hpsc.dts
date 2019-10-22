@@ -20,7 +20,9 @@
 	#size-cells = <2>;
 
 	aliases {
+#if CONFIG_ETH
 		ethernet0 = &eth;
+#endif /* CONFIG_ETH */
 	};
 
         /* NOTE: memory { } nodes appended by u-boot from its device tree */
@@ -30,14 +32,15 @@
 		#size-cells = <2>;
 		ranges;
 
-#if 0
+#if CONFIG_RAMOOPS
 		ramoops@0x87200000 {
 			compatible = "ramoops";
 			reg = <0x0 0x87200000 0x0 0x0400000>;
 			ftrace-size = <0x400000>;
 		};
-#endif
+#endif /* CONFIG_RAMOOPS */
 
+#if CONFIG_SHMEM
 		/* These shared memory regions cover the following range: */
 		/* reg = <0x0 0xbf800000 0x0 0x400000>; */
 		/* First part of the memory is for userspace */
@@ -60,8 +63,10 @@
 		kshm_region_trch_out: kshm@0x879f8000 {
 			reg = <0x0 0x879f8000 0x0 0x08000>;
 		};
+#endif /* CONFIG_SHMEM */
 	};
 
+#if CONFIG_SHMEM
 	shm0 {
 		compatible = "hpsc-shmem";
 		region-name = "region0";
@@ -83,6 +88,7 @@
 		memory-region-in = <&kshm_region_trch_in>;
 		memory-region-out = <&kshm_region_trch_out>;
 	};
+#endif /* CONFIG_SHMEM */
 
 	cpus {
 		#address-cells = <1>;
@@ -178,6 +184,7 @@
 
 	};
 
+#if CONFIG_PMU
 	pmu {
 		compatible = "arm,armv8-pmuv3";
 		interrupt-parent = <&gic>;
@@ -192,6 +199,7 @@
 		interrupt-affinity = <&cpul0>, <&cpul1>, <&cpul2>, <&cpul3>,
                                      <&cpub0>, <&cpub1>, <&cpub2>, <&cpub3>;
 	};
+#endif /* CONFIG_PMU */
 
 	psci {
 		compatible = "arm,psci-0.2";
@@ -225,6 +233,8 @@
 			#redistributor-regions = <1>;
 		};
 
+#if CONFIG_ETH
+#if CONFIG_ETH_CDNS
 		eth: ethernet@0xe5300000 {
 			compatible = "cdns,gem";
 			reg = <0x0 0xe5300000 0x0 0x1000>;
@@ -238,12 +248,55 @@
 			clocks = <&clk125>, <&clk125>, <&clk125>;
 			clock-names = "pclk", "hclk", "tx_clk";
 
+#if CONFIG_SMMU
 			iommus = <&smmu MASTER_ID_XGMAC>;
+#endif
 
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};
+#elif CONFIG_ETH_SNPS
+		eth: ethernet2@e5300000 {
+			compatible = "snps,dwc-qos-ethernet-4.10";
+			reg = <0x0 0xe5300000 0x0 0x4000>;
 
+			status = "okay";
+
+			clock-names = "phy_ref_clk", "apb_pclk";
+			clocks = <&clk100>, <&clk100>;
+
+			interrupt-parent = <&gic>;
+			interrupts = <0x0 49 0x4>;
+
+			phy-handle = <&phy2>;
+			phy-mode = "rgmii";
+			/* phy-reset-gpios = <&gpioctlr 43 GPIO_ACTIVE_LOW>; */
+
+			snps,en-tx-lpi-clockgating;
+			snps,en-lpi;
+			snps,write-requests = <2>;
+			snps,read-requests = <16>;
+			snps,burst-map = <0x7>;
+			snps,txpbl = <8>;
+			snps,rxpbl = <2>;
+
+			dma-coherent;
+
+			mdio {
+				#address-cells = <0x1>;
+				#size-cells = <0x0>;
+
+				phy2: phy@1 {
+					compatible = "ethernet-phy-ieee802.3-c22";
+					device_type = "ethernet-phy";
+					reg = <0x1>;
+				};
+			};
+		};
+#endif /* CONFIG_ETH_* */
+#endif /* CONFIG_ETH */
+
+#if CONFIG_SMMU
 		smmu: smmu@f9300000 {
 			compatible = "arm,mmu-500";
 			reg = <0x0 0xf9300000 0x0 0x20000>;
@@ -269,6 +322,7 @@
                                 <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_14 GIC_LVL_HI>,
                                 <GIC_SPI HPPS_IRQ__HPPS_SMMU_CB_15 GIC_LVL_HI>;
 		};
+#endif /* CONFIG_SMMU */
 
 		uart0: serial@f92c0000 {
 			compatible = "ns16550a";
@@ -282,7 +336,9 @@
 			clocks = <&uart_clk &uart_clk>;
 			clock-names = "uart_clk", "pclk";
 		};
-
+#if CONFIG_MAILBOXES
+		/* TODO: name the two mailboxes with index, without referring
+		 * to TRCH or RTPS */
 		trch_mbox: mailbox@0xfff50000 {
 			compatible = "hpsc,hpsc-mbox";
                         reg = <0x0 0xfff50000 0x0 0x1000>;
@@ -446,14 +502,18 @@
 				    <&trch_mbox  30     0  MASTER_ID_HPPS_CPU0 MASTER_ID_TRCH_CPU>,
 				    <&trch_mbox  31     0  MASTER_ID_TRCH_CPU  MASTER_ID_HPPS_CPU0>;
 		};
+#endif /* CONFIG_MAILBOXES */
 
+#if CONFIG_WDTS
 		hpps_wdt: wdt@0xfff70000 {
 			compatible = "hpsc,hpsc-wdt";
 			reg = <0x0 0xfff70000 0x0 0x80000>;
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_PPI PPI_IRQ__WDT GIC_LVL_HI>;
 		};
+#endif /* CONFIG_WDTS */
 
+#if CONFIG_RTI_TIMERS
 		hpps_rti_tmr: hpsc-rti-tmr@0xfeed0000 {
 			compatible = "hpsc,hpsc-rti-timer";
 			reg = <0x0 0xfeed0000 0x0 0x80000>;
@@ -474,7 +534,9 @@
 				 <&hpps_rti_tmr 6>,
 				 <&hpps_rti_tmr 7>;
 		};
+#endif /* CONFIG_RTI_TIMERS */
 
+#if CONFIG_DMA
 		hpps_dma: dma-controller@0xf92e0000 {
 			#dma-cells = <1>;
 			compatible = "arm,primecell";
@@ -482,7 +544,9 @@
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__HPPS_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__HPPS_DMA_EV0   GIC_LVL_HI>;
+#if CONFIG_SMMU
 			iommus = <&smmu MASTER_ID_HPPS_DMA>;
+#endif
 			clocks = <&apb_pclk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
@@ -494,7 +558,9 @@
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__SRIO0_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__SRIO0_DMA_EV0   GIC_LVL_HI>;
+#if CONFIG_SMMU
 			iommus = <&smmu MASTER_ID_SRIO0_DMA>;
+#endif
 			clocks = <&apb_pclk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
@@ -506,23 +572,30 @@
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__SRIO1_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__SRIO1_DMA_EV0 GIC_LVL_HI>;
+#if CONFIG_SMMU
 			iommus = <&smmu MASTER_ID_SRIO1_DMA>;
+#endif
 			clocks = <&apb_pclk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
+#endif /* CONFIG_DMA */
+#if CONFIG_SMC
 		smcc: smcc-memory-controller@f92d0000 {
 			#address-cells = <2>;
 			#size-cells = <1>;
 			status = "okay";
 			clocks = <&apb_pclk>, <&clk125>;
 			clock-names = "apb_pclk", "memclk"; /* apb_pclk required because amba code looks for it by name */
+#if CONFIG_SMMU
 			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
+#endif
 			compatible = "arm,primecell";
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC GIC_LVL_HI>;
 			ranges = <0x0 0x0 0x6 0x00000000 0x20000000>, /* Nand CS Region */
 				 <0x1 0x0 0x6 0x20000000 0xE0000000>; /* NOR CS Region */
 			reg = <0x0 0xf92d0000 0x0 0x1000>;
+
 
 			nand0: nand0@680000000 {
 				status = "okay";
@@ -556,6 +629,7 @@
 				arm,sram-cycle-t6 = <0>;
 			};
 		};
+#endif /* CONFIG_SMC */
 	};
 
 	uart_clk: uart_clk {
@@ -563,20 +637,28 @@
 		#clock-cells = <0>;
 		clock-frequency = <16000000>;
 	};
+
+#if CONFIG_SMC || CONFIG_ETH_SNPS
 	clk100: clk100 {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <100000000>;
 	};
+#endif /* CONFIG_SMC || CONFIG_ETH_SNPS */
+
+#if CONFIG_SMC || CONFIG_ETH_CDNS
 	clk125: clk125 {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <125000000>;
 	};
+#endif /* CONFIG_SMC || CONFIG_ETH_CDNS */
 
+#if CONFIG_DMA || CONFIG_SMC || CONFIG_ETH_SNPS
 	apb_pclk: apb_pclk {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <533000000>;
 	};
+#endif /* CONFIG_DMA || CONFIG_SMC || CONFIG_ETH_SNPS */
 };
