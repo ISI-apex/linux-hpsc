@@ -5037,6 +5037,10 @@ static int nand_scan_ident(struct nand_chip *chip, unsigned int maxchips,
 		return ret;
 	}
 
+	pr_info("%s: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n", __func__,
+		chip->id.data[0], chip->id.data[1], chip->id.data[2], chip->id.data[3],
+		chip->id.data[4], chip->id.data[5], chip->id.data[6], chip->id.data[7]);
+
 	nand_maf_id = chip->id.data[0];
 	nand_dev_id = chip->id.data[1];
 
