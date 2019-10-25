@@ -121,7 +121,13 @@ int pl353_smc_set_buswidth(unsigned int bw)
 	if (bw != PL353_SMC_MEM_WIDTH_8  && bw != PL353_SMC_MEM_WIDTH_16)
 		return -EINVAL;
 
+	pr_debug("%s: set SMC_353 buswidth = %s\n", __func__,
+		 (bw == PL353_SMC_MEM_WIDTH_16) ? "16 bit" : "8 bit");
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 bw, PL353_SMC_SET_OPMODE_OFFS);
 	writel(bw, pl353_smc_base + PL353_SMC_SET_OPMODE_OFFS);
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL353_SMC_DC_UPT_NAND_REGS, PL353_SMC_DIRECT_CMD_OFFS);
 	writel(PL353_SMC_DC_UPT_NAND_REGS, pl353_smc_base +
 	       PL353_SMC_DIRECT_CMD_OFFS);
 
@@ -142,6 +148,11 @@ void pl353_smc_set_cycles(u32 timings[])
 	 *
 	 * NWE_PULSE = tWP
 	 */
+	pr_debug("%s: set SMC_353 timing: t_rc = 0x%x, t_wc = 0x%x, "
+		 "t_rea = 0x%x, t_wp = 0x%x, t_clr = 0x%x, t_ar = 0x%x, "
+		 "t_rr = 0x%x \n", __func__, timings[0], timings[1],
+		 timings[2], timings[3], timings[4], timings[5],
+		 timings[6]);
 	timings[0] &= PL353_SMC_SET_CYCLES_T0_MASK;
 	timings[1] = (timings[1] & PL353_SMC_SET_CYCLES_T1_MASK) <<
 			PL353_SMC_SET_CYCLES_T1_SHIFT;
@@ -158,6 +169,8 @@ void pl353_smc_set_cycles(u32 timings[])
 	timings[0] |= timings[1] | timings[2] | timings[3] |
 			timings[4] | timings[5] | timings[6];
 
+	pr_debug("%s: writel 0x%x @ 0x%x (offset)\n", __func__,
+		 timings[0], PL353_SMC_SET_CYCLES_OFFS);
 	writel(timings[0], pl353_smc_base + PL353_SMC_SET_CYCLES_OFFS);
 	writel(PL353_SMC_DC_UPT_NAND_REGS, pl353_smc_base +
 	       PL353_SMC_DIRECT_CMD_OFFS);
@@ -239,6 +252,8 @@ int pl353_smc_set_ecc_mode(enum pl353_smc_ecc_mode mode)
 		reg = readl(pl353_smc_base + PL353_SMC_ECC_MEMCFG_OFFS);
 		reg &= ~PL353_SMC_ECC_MEMCFG_MODE_MASK;
 		reg |= mode << PL353_SMC_ECC_MEMCFG_MODE_SHIFT;
+		pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+			 reg, PL353_SMC_ECC_MEMCFG_OFFS);
 		writel(reg, pl353_smc_base + PL353_SMC_ECC_MEMCFG_OFFS);
 
 		break;
@@ -279,6 +294,8 @@ int pl353_smc_set_ecc_pg_size(unsigned int pg_sz)
 	reg = readl(pl353_smc_base + PL353_SMC_ECC_MEMCFG_OFFS);
 	reg &= ~PL353_SMC_ECC_MEMCFG_PGSIZE_MASK;
 	reg |= sz;
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 reg, PL353_SMC_ECC_MEMCFG_OFFS);
 	writel(reg, pl353_smc_base + PL353_SMC_ECC_MEMCFG_OFFS);
 
 	return 0;
@@ -332,6 +349,7 @@ static void pl353_smc_init_sram_interface(struct platform_device *pdev,
 	u32 t_rc, t_wc, t_rea, t_wp, t_clr, t_ar, t_rr;
 	u32 t_adv, t_wr_sync, t_rd_sync, t_mw;
 	u32 cre, ext_addr_bits, chip_nmbr;
+	u32 opmode, cycles, cmd;
 	int err, i;
 
 	/* sram-cycle-<X> property is refer to the SRAM timing
@@ -428,28 +446,35 @@ static void pl353_smc_init_sram_interface(struct platform_device *pdev,
 	}
 
 	/* set OPMODE */
-	writel((t_adv << PL353_OPMODE_SET_ADV_SHIFT) |
+	opmode = (t_adv << PL353_OPMODE_SET_ADV_SHIFT) |
 		(t_rd_sync << PL353_OPMODE_RD_SYNC_SHIFT) |
 		(t_wr_sync << PL353_OPMODE_WR_SYNC_SHIFT) |
-		(t_mw << PL353_OPMODE_SET_MW_SHIFT)
-		, pl353_smc_base + PL353_SMC_SET_OPMODE_OFFS);
+		(t_mw << PL353_OPMODE_SET_MW_SHIFT);
+
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n",  __func__, opmode,
+		 PL353_SMC_SET_OPMODE_OFFS);
+	writel(opmode, pl353_smc_base + PL353_SMC_SET_OPMODE_OFFS);
 
 	/* set cycles */
-        writel( (t_rc   & PL353_SMC_SET_CYCLES_T0_MASK) |
+        cycles = (t_rc   & PL353_SMC_SET_CYCLES_T0_MASK) |
 		(t_wc  << PL353_SMC_SET_CYCLES_T1_SHIFT) |
 		(t_rea << PL353_SMC_SET_CYCLES_T2_SHIFT) |
 		(t_wp  << PL353_SMC_SET_CYCLES_T3_SHIFT) |
 		(t_clr << PL353_SMC_SET_CYCLES_T4_SHIFT) |
 		(t_ar  << PL353_SMC_SET_CYCLES_T5_SHIFT) |
-		(t_rr  << PL353_SMC_SET_CYCLES_T6_SHIFT)
-		, pl353_smc_base + PL353_SMC_SET_CYCLES_OFFS);
+		(t_rr  << PL353_SMC_SET_CYCLES_T6_SHIFT);
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__, cycles,
+		 PL353_SMC_SET_CYCLES_OFFS);
+        writel(cycles, pl353_smc_base + PL353_SMC_SET_CYCLES_OFFS);
 
 	for (i = 0; i < chip_nmbr ; i++) {
-		writel( (cre << PL353_SMC_DC_CMD_set_cre_SHIFT) |
+		cmd = (cre << PL353_SMC_DC_CMD_set_cre_SHIFT) |
 			(i << PL353_SMC_DC_CMD_chip_nmbr_SHIFT) |
 			(PL353_SMC_CMD_TYPE_ModeRegUpdateRegs << PL353_SMC_DC_CMD_cmd_type_SHIFT) |
-			(ext_addr_bits << PL353_SMC_DC_CMD_addr_SHIFT)
-			, pl353_smc_base + PL353_SMC_DIRECT_CMD_OFFS);
+			(ext_addr_bits << PL353_SMC_DC_CMD_addr_SHIFT);
+		writel(cmd, pl353_smc_base + PL353_SMC_DIRECT_CMD_OFFS);
+		pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__, cmd,
+			 PL353_SMC_DIRECT_CMD_OFFS);
 	}
 }
 
@@ -464,8 +489,12 @@ static void pl353_smc_init_nand_interface(struct amba_device *adev,
 	unsigned long timeout;
 
 	pl353_smc_set_buswidth(PL353_SMC_MEM_WIDTH_8);
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL353_SMC_CFG_CLR_INT_CLR_1, PL353_SMC_CFG_CLR_OFFS);
 	writel(PL353_SMC_CFG_CLR_INT_CLR_1,
 	       pl353_smc_base + PL353_SMC_CFG_CLR_OFFS);
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL353_SMC_DC_UPT_NAND_REGS, PL353_SMC_DIRECT_CMD_OFFS);
 	writel(PL353_SMC_DC_UPT_NAND_REGS, pl353_smc_base +
 	       PL353_SMC_DIRECT_CMD_OFFS);
 
@@ -481,8 +510,12 @@ static void pl353_smc_init_nand_interface(struct amba_device *adev,
 	if (time_after_eq(jiffies, timeout))
 		return;
 
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL353_NAND_ECC_CMD1, PL353_SMC_ECC_MEMCMD1_OFFS);
 	writel(PL353_NAND_ECC_CMD1,
 	       pl353_smc_base + PL353_SMC_ECC_MEMCMD1_OFFS);
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL353_NAND_ECC_CMD2, PL353_SMC_ECC_MEMCMD2_OFFS);
 	writel(PL353_NAND_ECC_CMD2,
 	       pl353_smc_base + PL353_SMC_ECC_MEMCMD2_OFFS);
 }
@@ -555,6 +588,8 @@ static int pl353_smc_probe(struct amba_device *adev, const struct amba_id *id)
 	amba_set_drvdata(adev, pl353_smc);
 
 	/* clear interrupts */
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL353_SMC_CFG_CLR_DEFAULT_MASK, PL353_SMC_CFG_CLR_OFFS);
 	writel(PL353_SMC_CFG_CLR_DEFAULT_MASK,
 	       pl353_smc_base + PL353_SMC_CFG_CLR_OFFS);
 
