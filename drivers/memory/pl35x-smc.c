@@ -105,15 +105,6 @@
 #define PL35X_SMC_MW_16_BIT	0b01
 #define PL35X_SMC_MW_32_BIT	0b10
 
-//#define PL35X_ERR_DEBUG
-#ifdef PL35X_ERR_DEBUG
-#define DB_PRINT(...) do { \
-    fprintf(stderr,  ": %s: ", __func__); \
-    fprintf(stderr, ## __VA_ARGS__); \
-    } while (0);
-#else
-    #define DB_PRINT(...)
-#endif
 /**
  * struct pl35x_smc_data - Private smc driver structure
  * @devclk:		Pointer to the peripheral clock
@@ -137,8 +128,13 @@ int pl35x_smc_set_buswidth(unsigned int bw)
 
 	if (bw != PL35X_SMC_MEM_WIDTH_8  && bw != PL35X_SMC_MEM_WIDTH_16)
 		return -EINVAL;
-
+	pr_debug("%s: set SMC_353 buswidth = %s\n", __func__,
+		 (bw == PL35X_SMC_MEM_WIDTH_16) ? "16 bit" : "8 bit");
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 bw, PL35X_SMC_SET_OPMODE_OFFS);
 	writel(bw, pl35x_smc_base + PL35X_SMC_SET_OPMODE_OFFS);
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL35X_SMC_DC_UPT_NAND_REGS, PL35X_SMC_DIRECT_CMD_OFFS);
 	writel(PL35X_SMC_DC_UPT_NAND_REGS, pl35x_smc_base +
 	       PL35X_SMC_DIRECT_CMD_OFFS);
 
@@ -161,6 +157,9 @@ EXPORT_SYMBOL_GPL(pl35x_smc_set_buswidth);
 static void pl35x_smc_set_cycles(u32 t0, u32 t1, u32 t2, u32 t3, u32
 			      t4, u32 t5, u32 t6)
 {
+	pr_debug("%s: set SMC_353 timing: t_rc = 0x%x, t_wc = 0x%x, "
+		 "t_rea = 0x%x, t_wp = 0x%x, t_clr = 0x%x, t_ar = 0x%x, "
+		 "t_rr = 0x%x \n", __func__, t0, t1, t2, t3, t4, t5, t6);
 	t0 &= PL35X_SMC_SET_CYCLES_T0_MASK;
 	t1 = (t1 & PL35X_SMC_SET_CYCLES_T1_MASK) <<
 			PL35X_SMC_SET_CYCLES_T1_SHIFT;
@@ -177,6 +176,8 @@ static void pl35x_smc_set_cycles(u32 t0, u32 t1, u32 t2, u32 t3, u32
 
 	t0 |= t1 | t2 | t3 | t4 | t5 | t6;
 
+	pr_debug("%s: writel 0x%x @ 0x%x (offset)\n", __func__,
+		 t0, PL35X_SMC_SET_CYCLES_OFFS);
 	writel(t0, pl35x_smc_base + PL35X_SMC_SET_CYCLES_OFFS);
 	writel(PL35X_SMC_DC_UPT_NAND_REGS, pl35x_smc_base +
 	       PL35X_SMC_DIRECT_CMD_OFFS);
@@ -247,6 +248,10 @@ EXPORT_SYMBOL_GPL(pl35x_smc_get_nand_int_status_raw);
  */
 void pl35x_smc_clr_nand_int(void)
 {
+#if 0
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL35X_SMC_CFG_CLR_INT_CLR_1, PL35X_SMC_CFG_CLR_OFFS);
+#endif
 	writel(PL35X_SMC_CFG_CLR_INT_CLR_1,
 		pl35x_smc_base + PL35X_SMC_CFG_CLR_OFFS);
 }
@@ -270,6 +275,8 @@ int pl35x_smc_set_ecc_mode(enum pl35x_smc_ecc_mode mode)
 		reg = readl(pl35x_smc_base + PL35X_SMC_ECC_MEMCFG_OFFS);
 		reg &= ~PL35X_SMC_ECC_MEMCFG_MODE_MASK;
 		reg |= mode << PL35X_SMC_ECC_MEMCFG_MODE_SHIFT;
+		pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+			 reg, PL35X_SMC_ECC_MEMCFG_OFFS);
 		writel(reg, pl35x_smc_base + PL35X_SMC_ECC_MEMCFG_OFFS);
 
 		break;
@@ -310,6 +317,8 @@ int pl35x_smc_set_ecc_pg_size(unsigned int pg_sz)
 	reg = readl(pl35x_smc_base + PL35X_SMC_ECC_MEMCFG_OFFS);
 	reg &= ~PL35X_SMC_ECC_MEMCFG_PGSIZE_MASK;
 	reg |= sz;
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 reg, PL35X_SMC_ECC_MEMCFG_OFFS);
 	writel(reg, pl35x_smc_base + PL35X_SMC_ECC_MEMCFG_OFFS);
 
 	return 0;
@@ -360,6 +369,7 @@ static void pl35x_smc_init_sram_interface(struct platform_device *pdev,
 	u32 t_rc, t_wc, t_rea, t_wp, t_clr, t_ar, t_rr;
 	u32 t_adv, t_wr_sync, t_rd_sync, t_mw;
 	u32 cre, ext_addr_bits, chip_nmbr;
+	u32 opmode, cycles, cmd;
 	int err, i;
 
 	/* sram-cycle-<X> property is refer to the SRAM timing
@@ -456,28 +466,38 @@ static void pl35x_smc_init_sram_interface(struct platform_device *pdev,
 	}
 
 	/* set OPMODE */
-	writel((t_adv << PL35X_OPMODE_SET_ADV_SHIFT) |
-		(t_rd_sync << PL35X_OPMODE_RD_SYNC_SHIFT) |
-		(t_wr_sync << PL35X_OPMODE_WR_SYNC_SHIFT) |
-		(t_mw << PL35X_OPMODE_SET_MW_SHIFT) 
-		, pl35x_smc_base + PL35X_SMC_SET_OPMODE_OFFS);
+	opmode = (t_adv << PL35X_OPMODE_SET_ADV_SHIFT) |
+		 (t_rd_sync << PL35X_OPMODE_RD_SYNC_SHIFT) |
+		 (t_wr_sync << PL35X_OPMODE_WR_SYNC_SHIFT) |
+		 (t_mw << PL35X_OPMODE_SET_MW_SHIFT);
+
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n",  __func__, opmode,
+		 PL35X_SMC_SET_OPMODE_OFFS);
+	writel(opmode, pl35x_smc_base + PL35X_SMC_SET_OPMODE_OFFS);
 
 	/* set cycles */
-        writel( (t_rc   & PL35X_SMC_SET_CYCLES_T0_MASK) |
-		(t_wc  << PL35X_SMC_SET_CYCLES_T1_SHIFT) |
-		(t_rea << PL35X_SMC_SET_CYCLES_T2_SHIFT) |
-		(t_wp  << PL35X_SMC_SET_CYCLES_T3_SHIFT) |
-		(t_clr << PL35X_SMC_SET_CYCLES_T4_SHIFT) |
-		(t_ar  << PL35X_SMC_SET_CYCLES_T5_SHIFT) |
-		(t_rr  << PL35X_SMC_SET_CYCLES_T6_SHIFT)
-		, pl35x_smc_base + PL35X_SMC_SET_CYCLES_OFFS);
+	cycles	= (t_rc   & PL35X_SMC_SET_CYCLES_T0_MASK) |
+		  (t_wc  << PL35X_SMC_SET_CYCLES_T1_SHIFT) |
+		  (t_rea << PL35X_SMC_SET_CYCLES_T2_SHIFT) |
+		  (t_wp  << PL35X_SMC_SET_CYCLES_T3_SHIFT) |
+		  (t_clr << PL35X_SMC_SET_CYCLES_T4_SHIFT) |
+		  (t_ar  << PL35X_SMC_SET_CYCLES_T5_SHIFT) |
+		  (t_rr  << PL35X_SMC_SET_CYCLES_T6_SHIFT);
+
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__, cycles,
+		 PL35X_SMC_SET_CYCLES_OFFS);
+        writel(cycles, pl35x_smc_base + PL35X_SMC_SET_CYCLES_OFFS);
 
 	for (i = 0; i < chip_nmbr ; i++) {
-		writel( (cre << PL35X_SMC_DC_CMD_set_cre_SHIFT) |
-			(i << PL35X_SMC_DC_CMD_chip_nmbr_SHIFT) |
-			(PL35X_SMC_CMD_TYPE_ModeRegUpdateRegs << PL35X_SMC_DC_CMD_cmd_type_SHIFT) |
-			(ext_addr_bits << PL35X_SMC_DC_CMD_addr_SHIFT)
-			, pl35x_smc_base + PL35X_SMC_DIRECT_CMD_OFFS);
+		cmd = (cre << PL35X_SMC_DC_CMD_set_cre_SHIFT) |
+			 (i << PL35X_SMC_DC_CMD_chip_nmbr_SHIFT) |
+			 (PL35X_SMC_CMD_TYPE_ModeRegUpdateRegs <<
+				PL35X_SMC_DC_CMD_cmd_type_SHIFT) |
+			 (ext_addr_bits << PL35X_SMC_DC_CMD_addr_SHIFT);
+
+		pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__, cmd,
+			 PL35X_SMC_DIRECT_CMD_OFFS);
+		writel(cmd, pl35x_smc_base + PL35X_SMC_DIRECT_CMD_OFFS);
 	}
 }
 
@@ -562,8 +582,12 @@ default_nand_timing:
 	 * is for 2Gb Numonyx flash.
 	 */
 	pl35x_smc_set_cycles(t_rc, t_wc, t_rea, t_wp, t_clr, t_ar, t_rr);
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL35X_SMC_CFG_CLR_INT_CLR_1, PL35X_SMC_CFG_CLR_OFFS);
 	writel(PL35X_SMC_CFG_CLR_INT_CLR_1,
 		pl35x_smc_base + PL35X_SMC_CFG_CLR_OFFS);
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL35X_SMC_DC_UPT_NAND_REGS, PL35X_SMC_DIRECT_CMD_OFFS);
 	writel(PL35X_SMC_DC_UPT_NAND_REGS, pl35x_smc_base +
 	       PL35X_SMC_DIRECT_CMD_OFFS);
 	/* Wait till the ECC operation is complete */
@@ -577,8 +601,12 @@ default_nand_timing:
 	if (time_after_eq(jiffies, timeout))
 		dev_err(&pdev->dev, "nand ecc busy status timed out");
 	/* Set the command1 and command2 register */
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL35X_NAND_ECC_CMD1, PL35X_SMC_ECC_MEMCMD1_OFFS);
 	writel(PL35X_NAND_ECC_CMD1,
 			pl35x_smc_base + PL35X_SMC_ECC_MEMCMD1_OFFS);
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL35X_NAND_ECC_CMD2, PL35X_SMC_ECC_MEMCMD2_OFFS);
 	writel(PL35X_NAND_ECC_CMD2,
 			pl35x_smc_base + PL35X_SMC_ECC_MEMCMD2_OFFS);
 }
@@ -644,6 +672,8 @@ static int pl35x_smc_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, pl35x_smc);
 
 	/* clear interrupts */
+	pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__,
+		 PL35X_SMC_CFG_CLR_DEFAULT_MASK, PL35X_SMC_CFG_CLR_OFFS);
 	writel(PL35X_SMC_CFG_CLR_DEFAULT_MASK,
 		pl35x_smc_base + PL35X_SMC_CFG_CLR_OFFS);
 
