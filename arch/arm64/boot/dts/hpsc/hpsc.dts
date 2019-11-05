@@ -68,6 +68,11 @@
 			reg = <0x0 0x879f8000 0x0 0x08000>;
 		};
 #endif /* CONFIG_HPSC_MSG_TP_SHMEM */
+
+		/* TRCH uses this hi-mem for testing purposes */
+		trch@0x100000000 {
+			reg = <0x1 0x00000000 0x0 0x00400000>;
+		};
 	};
 
 #if CONFIG_SHMEM
