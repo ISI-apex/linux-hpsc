@@ -390,8 +390,8 @@
 
 			/* Map all instances onto one pair of IRQs,
 			 * this pair must be not be used by other subsystems */
-			interrupt-idx-rcv = <MBOX_HPPS_TRCH__HPPS_RCV_INT>;
-			interrupt-idx-ack = <MBOX_HPPS_TRCH__HPPS_ACK_INT>;
+			interrupt-idx-rcv = <HPPS_MBOX0_INT_EVT0__HPPS_SMP_SSW>;
+			interrupt-idx-ack = <HPPS_MBOX0_INT_EVT1__HPPS_SMP_SSW>;
 
 			#mbox-cells = <4>;
                         /* instance index,
@@ -423,8 +423,8 @@
 				     <GIC_SPI HPPS_IRQ__HR_MBOX_14 GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__HR_MBOX_15 GIC_LVL_HI>;
 
-			interrupt-idx-rcv = <MBOX_HPPS_RTPS__HPPS_RCV_INT>;
-			interrupt-idx-ack = <MBOX_HPPS_RTPS__HPPS_ACK_INT>;
+			interrupt-idx-rcv = <HPPS_MBOX1_INT_EVT0__HPPS_SMP_SSW>;
+			interrupt-idx-ack = <HPPS_MBOX1_INT_EVT1__HPPS_SMP_SSW>;
 
 			#mbox-cells = <GIC_LVL_HI>;
 		};
