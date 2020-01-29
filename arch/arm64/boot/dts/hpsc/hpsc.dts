@@ -595,39 +595,32 @@
 #endif /* CONFIG_DMA */
 #if CONFIG_SMC
 		smcc: smcc-memory-controller@f92d0000 {
-			#address-cells = <2>;
-			#size-cells = <1>;
+			compatible = "arm,primecell";
+			reg = <0x0 0xf92d0000 0x0 0x1000>;
 			status = "okay";
+
 			clocks = <&apb_pclk>, <&clk125>;
 			clock-names = "apb_pclk", "memclk"; /* apb_pclk required because amba code looks for it by name */
+
 #if CONFIG_SMMU
 			/* iommus = <&smmu MASTER_ID_SMC>; */ /* not connected to an MMU TBU */
 #endif
-			compatible = "arm,primecell";
+
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__HPPS_SMC GIC_LVL_HI>;
-			ranges = <0x0 0x0 0x6 0x00000000 0x20000000>, /* Nand CS Region */
-				 <0x1 0x0 0x6 0x20000000 0xE0000000>; /* NOR CS Region */
-			reg = <0x0 0xf92d0000 0x0 0x1000>;
 
 
-			nand0: nand0@680000000 {
-				status = "okay";
-				compatible = "arm,pl353-nand-r2p1";
-				reg = <0x6 0x80000000 0x10000000>;
-			};
-			nor0: flash@e2000000 {
-				status = "disabled";
-				compatible = "cfi-flash";
-				reg = <0x1 0x0 0xE0000000>;
-			};
+			#address-cells = <2>;
+			#size-cells = <1>;
+			ranges;
+
+#if CONFIG_SMC_SRAM__NVRAM
 			sram: sram@600000000 {
-				status = "okay";
 				compatible = "mmio-sram";
-
-				reg = <0x6 0x80000000 0x80000000>;
+				reg = <0x6 0x80000000 0x1 0x00000000>;
 
 				arm,sram-chip-nmbr = <1>;
+
 				arm,sram-mw = <0x2>; /* 32-bit width */
 				arm,sram-wr-sync = <1>;
 				arm,sram-rd-sync = <1>;
@@ -642,6 +635,27 @@
 				arm,sram-cycle-t5 = <1>;
 				arm,sram-cycle-t6 = <0>;
 			};
+
+#elif CONFIG_SMC_SRAM__NOR
+			sram: sram@600000000 {
+				compatible = "cfi-flash";
+				reg = <0x3 0x00000000 0x0 0x20000000>;
+				status = "okay";
+
+				bank-width = <4>;
+				arm,sram-cycle-t0 = <1>;
+				arm,sram-cycle-t1 = <1>;
+			};
+#endif /* CONFIG_SMC_SRAM__ */
+
+#if CONFIG_SMC_NAND
+			nand0: nand0@680000000 {
+				compatible = "arm,pl353-nand-r2p1";
+				reg = <0x6 0x80000000 0x10000000>;
+
+				status = "okay";
+			};
+#endif /* CONFIG_SMC_NAND */
 		};
 #endif /* CONFIG_SMC */
 	};

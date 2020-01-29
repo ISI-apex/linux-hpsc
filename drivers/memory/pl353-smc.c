@@ -522,7 +522,9 @@ static void pl353_smc_init_nand_interface(struct amba_device *adev,
 
 static const struct of_device_id pl353_smc_supported_children[] = {
 	{
-		.compatible = "cfi-flash"
+		.compatible = "cfi-flash",
+		/* handles NOR Flash connected to SMC-353's SRAM port */
+		.data = pl353_smc_init_sram_interface
 	},
 	{
 		.compatible = "arm,pl353-nand-r2p1",
