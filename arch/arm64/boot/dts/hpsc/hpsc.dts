@@ -628,11 +628,14 @@
 			reg = <0x0 0xe0470000 0x0 0x1000>;
 			sram: sram@300000000 {
 				status = "okay";
-				compatible = "mmio-sram";
-				reg = <0x3 0x00000000 0x0 0x80000000>;
+				compatible = "cfi-flash";
+				reg = <0x3 0x00000000 0x0 0x04000000>;
 				#address-cells = <0x2>; 
 				#size-cells = <0x1>; 
+				bank-width = <4>;
 				power-domains = <&pd_nand>;
+				arm,sram-cycle-t0 = <1>;
+				arm,sram-cycle-t1 = <1>;
 			};
 		};
 		smcc_nand: smcc-nand@0xe0460000{

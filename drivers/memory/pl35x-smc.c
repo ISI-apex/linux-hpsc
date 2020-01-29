@@ -662,6 +662,7 @@ static int pl35x_smc_probe(struct platform_device *pdev)
 
 		if (of_match_node(matches_nor, child)) {
 			static int counts;
+			pl35x_smc_init_sram_interface(pdev, child);
 			if (!matches) {
 				matches = matches_nor;
 			} else {
