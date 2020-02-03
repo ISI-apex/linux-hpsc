@@ -589,9 +589,9 @@ static struct mtd_info *cfi_intelext_setup(struct mtd_info *mtd)
 	struct cfi_private *cfi = map->fldrv_priv;
 	unsigned long offset = 0;
 	int i,j;
-	unsigned long devsize = (1<<cfi->cfiq->DevSize) * cfi->interleave;
+	unsigned long devsize = (1UL<<cfi->cfiq->DevSize) * cfi->interleave;
 
-	//printk(KERN_DEBUG "number of CFI chips: %d\n", cfi->numchips);
+	printk(KERN_DEBUG "number of CFI chips: %d, DevSize(0x%x), interleave(0x%x), devsize(0x%lx)\n", cfi->numchips, cfi->cfiq->DevSize, cfi->interleave, devsize);
 
 	mtd->size = devsize * cfi->numchips;
 

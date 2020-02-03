@@ -614,6 +614,7 @@
 			#size-cells = <2>;
 			ranges ;
 
+#if CONFIG_SMC_SRAM__NVRAM
 			sram@600000000 {
 				compatible = "mmio-sram";
 				reg = <0x6 0x00000000 0x1 0x00000000>;
@@ -636,12 +637,25 @@
 				arm,sram-cycle-t5 = <1>;
 				arm,sram-cycle-t6 = <0>;
 			};
+#elif CONFIG_SMC_SRAM__NOR
+			sram@600000000 {
+				compatible = "cfi-flash";
+				reg = <0x6 0x00000000 0x0 0x20000000>;
+				status = "okay";
+
+				bank-width = <4>;
+				arm,sram-cycle-t0 = <1>;
+				arm,sram-cycle-t1 = <1>;
+			}
+#endif /* CONFIG_SMC_SRAM__* */
+#if CONFIG_SMC_NAND
 			nand0@680000000 {
 				compatible = "arm,pl353-nand-r2p1";
 				reg = <0x6 0x80000000 0x0 0x1000000>;
 
 				status = "okay";
 			};
+#endif /* CONFIG_SMC_NAND */
 		};
 #endif /* CONFIG_SMC */
 	};
