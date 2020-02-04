@@ -644,9 +644,25 @@
 				status = "okay";
 
 				bank-width = <4>;
+
+				/* TODO: some of these params may not be
+				   relevant to the chip; kernel should be fixed
+				   to look only for relevant ones. */
+				arm,sram-chip-nmbr = <1>;
+				arm,sram-mw = <0x2>; /* 32-bit width */
+				arm,sram-wr-sync = <1>;
+				arm,sram-rd-sync = <1>;
+				arm,sram-cre= <1>;
+				arm,sram-adv = <1>;
+				arm,sram-ext-addr-bits= <0xb>;
 				arm,sram-cycle-t0 = <1>;
 				arm,sram-cycle-t1 = <1>;
-			}
+				arm,sram-cycle-t2 = <1>;
+				arm,sram-cycle-t3 = <1>;
+				arm,sram-cycle-t4 = <1>;
+				arm,sram-cycle-t5 = <1>;
+				arm,sram-cycle-t6 = <0>;
+			};
 #endif /* CONFIG_SMC_SRAM__* */
 #if CONFIG_SMC_NAND
 			nand0@680000000 {
