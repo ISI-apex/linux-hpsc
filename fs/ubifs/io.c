@@ -791,9 +791,17 @@ int ubifs_wbuf_write_nolock(struct ubifs_wbuf *wbuf, void *buf, int len)
 	 * We align node length to 8-byte boundary because we anyway flash wbuf
 	 * if the remaining space is less than 8 bytes.
 	 */
+#ifdef HPSC_CUSTOM_ECC
+	n = aligned_len / c->max_write_size;
+#else
 	n = aligned_len >> c->max_write_shift;
+#endif
 	if (n) {
+#ifdef HPSC_CUSTOM_ECC
+		n = aligned_len * c->max_write_size;
+#else
 		n <<= c->max_write_shift;
+#endif
 		dbg_io("write %d bytes to LEB %d:%d", n, wbuf->lnum,
 		       wbuf->offs);
 		err = ubifs_leb_write(c, wbuf->lnum, buf + written,

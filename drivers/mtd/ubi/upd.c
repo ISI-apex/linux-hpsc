@@ -193,7 +193,11 @@ int ubi_start_leb_change(struct ubi_device *ubi, struct ubi_volume *vol,
 	vol->changing_leb = 1;
 	vol->ch_lnum = req->lnum;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	vol->upd_buf = vmalloc(CUSTOM_ALIGN((int)req->bytes, ubi->min_io_size));
+#else
 	vol->upd_buf = vmalloc(ALIGN((int)req->bytes, ubi->min_io_size));
+#endif
 	if (!vol->upd_buf)
 		return -ENOMEM;
 
@@ -235,7 +239,11 @@ static int write_leb(struct ubi_device *ubi, struct ubi_volume *vol, int lnum,
 	int err;
 
 	if (vol->vol_type == UBI_DYNAMIC_VOLUME) {
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+		int l = CUSTOM_ALIGN(len, ubi->min_io_size);
+#else
 		int l = ALIGN(len, ubi->min_io_size);
+#endif
 
 		memset(buf + len, 0xFF, l - len);
 		len = ubi_calc_data_len(ubi, buf, l);
@@ -411,8 +419,11 @@ int ubi_more_leb_change_data(struct ubi_device *ubi, struct ubi_volume *vol,
 	vol->upd_received += count;
 
 	if (vol->upd_received == vol->upd_bytes) {
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+		int len = CUSTOM_ALIGN((int)vol->upd_bytes, ubi->min_io_size);
+#else
 		int len = ALIGN((int)vol->upd_bytes, ubi->min_io_size);
-
+#endif
 		memset(vol->upd_buf + vol->upd_bytes, 0xFF,
 		       len - vol->upd_bytes);
 		len = ubi_calc_data_len(ubi, vol->upd_buf, len);

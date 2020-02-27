@@ -186,6 +186,7 @@ static int vtbl_check(const struct ubi_device *ubi,
 		name_len = be16_to_cpu(vtbl[i].name_len);
 		name = &vtbl[i].name[0];
 
+		ubi_dump_vtbl_record(&vtbl[i], i);	/* DK's add */
 		crc = crc32(UBI_CRC32_INIT, &vtbl[i], UBI_VTBL_RECORD_SIZE_CRC);
 		if (be32_to_cpu(vtbl[i].crc) != crc) {
 			ubi_err(ubi, "bad CRC at record %u: %#08x, not %#08x",
@@ -793,8 +794,14 @@ int ubi_read_volume_table(struct ubi_device *ubi, struct ubi_attach_info *ai)
 		ubi->vtbl_slots = UBI_MAX_VOLUMES;
 
 	ubi->vtbl_size = ubi->vtbl_slots * UBI_VTBL_RECORD_SIZE;
-	ubi->vtbl_size = ALIGN(ubi->vtbl_size, ubi->min_io_size);
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	/* ubi->vtbl_size = (ubi->vtbl_size + ubi->min_io_size) / ubi->min_io_size;
+	ubi->vtbl_size *= ubi->min_io_size; */
+	ubi->vtbl_size = CUSTOM_ALIGN(ubi->vtbl_size, ubi->min_io_size);
+#else
+	ubi->vtbl_size = ALIGN(ubi->vtbl_size, ubi->min_io_size);
+#endif
 	av = ubi_find_av(ai, UBI_LAYOUT_VOLUME_ID);
 	if (!av) {
 		/*

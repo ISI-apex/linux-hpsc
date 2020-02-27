@@ -521,7 +521,10 @@ static int init_constants_early(struct ubifs_info *c)
 	c->min_io_size = c->di.min_io_size;
 	c->min_io_shift = fls(c->min_io_size) - 1;
 	c->max_write_size = c->di.max_write_size;
+#ifdef HPSC_CUSTOM_ECC
+#else
 	c->max_write_shift = fls(c->max_write_size) - 1;
+#endif
 
 	if (c->leb_size < UBIFS_MIN_LEB_SZ) {
 		ubifs_errc(c, "too small LEBs (%d bytes), min. is %d bytes",

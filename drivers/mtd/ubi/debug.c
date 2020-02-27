@@ -39,10 +39,16 @@ void ubi_dump_flash(struct ubi_device *ubi, int pnum, int offset, int len)
 	void *buf;
 	loff_t addr = (loff_t)pnum * ubi->peb_size + offset;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	err = ubi_ecc_mtd_read(ubi, pnum, offset, len, &read, buf);
+	if (!buf)
+		return;
+#else
 	buf = vmalloc(len);
 	if (!buf)
 		return;
 	err = mtd_read(ubi->mtd, addr, len, &read, buf);
+#endif
 	if (err && err != -EUCLEAN) {
 		ubi_err(ubi, "err %d while reading %d bytes from PEB %d:%d, read %zd bytes",
 			err, len, pnum, offset, read);
@@ -148,6 +154,15 @@ void ubi_dump_vtbl_record(const struct ubi_vtbl_record *r, int idx)
 	pr_err("\tupd_marker      %d\n", (int)r->upd_marker);
 	pr_err("\tname_len        %d\n", name_len);
 
+	int * i = (int*)r->name;
+	pr_err("\tDK: name 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7], 
+i[8], i[9], i[10], i[11], i[12], i[13], i[14], i[15], 
+i[16], i[17], i[18], i[19], i[4+16], i[5+16], i[6+16], i[7+16], 
+i[24], i[1+24], i[2+24], i[3+24], i[4+24], i[5+24], i[6+24], i[7+24]); 
+	i = (int *) & r->flags;
+	pr_err("\tDK: flag and padding 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x \n", i[0], i[1], i[2], i[3], i[4], i[5]);
+	pr_err("\tDK: crc             %#08x\n", be32_to_cpu(r->crc));
 	if (r->name[0] == '\0') {
 		pr_err("\tname            NULL\n");
 		return;

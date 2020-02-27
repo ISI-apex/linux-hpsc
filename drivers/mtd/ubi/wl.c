@@ -448,7 +448,11 @@ static int sync_erase(struct ubi_device *ubi, struct ubi_wl_entry *e,
 	if (err)
 		return -EINVAL;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ec_hdr = kzalloc(ubi->_ec_hdr_alsize, GFP_NOFS);
+#else
 	ec_hdr = kzalloc(ubi->ec_hdr_alsize, GFP_NOFS);
+#endif
 	if (!ec_hdr)
 		return -ENOMEM;
 
@@ -1749,7 +1753,11 @@ static int self_check_ec(struct ubi_device *ubi, int pnum, int ec)
 	if (!ubi_dbg_chk_gen(ubi))
 		return 0;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ec_hdr = kzalloc(ubi->_ec_hdr_alsize, GFP_NOFS);
+#else
 	ec_hdr = kzalloc(ubi->ec_hdr_alsize, GFP_NOFS);
+#endif
 	if (!ec_hdr)
 		return -ENOMEM;
 

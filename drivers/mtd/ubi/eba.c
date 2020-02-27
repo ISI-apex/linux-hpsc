@@ -1024,8 +1024,12 @@ int ubi_eba_write_leb_st(struct ubi_device *ubi, struct ubi_volume *vol,
 		return -EROFS;
 
 	if (lnum == used_ebs - 1)
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+		len = CUSTOM_ALIGN(data_size, ubi->min_io_size);
+#else
 		/* If this is the last LEB @len may be unaligned */
 		len = ALIGN(data_size, ubi->min_io_size);
+#endif
 	else
 		ubi_assert(!(len & (ubi->min_io_size - 1)));
 
@@ -1220,7 +1224,11 @@ int ubi_eba_copy_leb(struct ubi_device *ubi, int from, int to,
 
 	if (vid_hdr->vol_type == UBI_VID_STATIC) {
 		data_size = be32_to_cpu(vid_hdr->data_size);
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+		aldata_size = CUSTOM_ALIGN(data_size, ubi->min_io_size);
+#else
 		aldata_size = ALIGN(data_size, ubi->min_io_size);
+#endif
 	} else
 		data_size = aldata_size =
 			    ubi->leb_size - be32_to_cpu(vid_hdr->data_pad);

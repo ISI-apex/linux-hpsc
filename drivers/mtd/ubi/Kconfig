@@ -103,4 +103,12 @@ config MTD_UBI_BLOCK
 
 	   If in doubt, say "N".
 
+config HPSC_CUSTOM_ECC 
+	bool "HPSC Custom ECC (39,32)"
+	default n
+	help
+	   Important: this feature provides (39, 32) ECC for NAND data.
+	   It reduces the amount of data to be store in NAND by about 1/5.
+	   ECC is stored in the same physical page that data reside.
+
 endif # MTD_UBI

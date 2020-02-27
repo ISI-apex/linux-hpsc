@@ -67,7 +67,14 @@ const struct inode_operations jffs2_dir_inode_operations =
 
 /***********************************************************************/
 
-
+#ifdef DK
+static void dk_print_ri(struct jffs2_raw_inode * ri, char * func) {
+printk("DK: %s: ri.data_crc(0x%x), ri.node_crc(0x%x), ri.uid(0x%x), ri.gid(0x%x), ri.isize(0x%x), ri.atime(0x%x), ri.ctime(0x%x), ri.mtime(0x%x), ri.offset(0x%x), ri.csize(0x%x), ri.dsize(0x%x) \n", func, 
+	ri->data_crc, ri->node_crc, ri->uid, ri->gid, ri->isize, ri->atime, ri->ctime, ri->mtime, ri->offset, ri->csize, ri->dsize);
+}
+#else
+static void dk_print_ri(struct jffs2_raw_inode * ri, char * func) {}
+#endif
 /* We keep the dirent list sorted in increasing order of name hash,
    and we use the same hash function as the dentries. Makes this
    nice and simple
@@ -334,6 +341,7 @@ static int jffs2_symlink (struct inode *dir_i, struct dentry *dentry, const char
 	ri->compr = JFFS2_COMPR_NONE;
 	ri->data_crc = cpu_to_je32(crc32(0, target, targetlen));
 	ri->node_crc = cpu_to_je32(crc32(0, ri, sizeof(*ri)-8));
+dk_print_ri(ri, __func__);
 
 	fn = jffs2_write_dnode(c, f, ri, target, targetlen, ALLOC_NORMAL);
 
@@ -663,6 +671,7 @@ static int jffs2_mknod (struct inode *dir_i, struct dentry *dentry, umode_t mode
 	ri->compr = JFFS2_COMPR_NONE;
 	ri->data_crc = cpu_to_je32(crc32(0, &dev, devlen));
 	ri->node_crc = cpu_to_je32(crc32(0, ri, sizeof(*ri)-8));
+dk_print_ri(ri, __func__);
 
 	fn = jffs2_write_dnode(c, f, ri, (char *)&dev, devlen, ALLOC_NORMAL);
 

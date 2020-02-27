@@ -44,7 +44,11 @@ int ubi_calc_data_len(const struct ubi_device *ubi, const void *buf,
 			break;
 
 	/* The resulting length must be aligned to the minimum flash I/O size */
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	length = CUSTOM_ALIGN(i + 1, ubi->min_io_size);
+#else
 	length = ALIGN(i + 1, ubi->min_io_size);
+#endif
 	return length;
 }
 

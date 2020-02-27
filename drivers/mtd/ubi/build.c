@@ -601,9 +601,23 @@ static int io_init(struct ubi_device *ubi, int max_beb_per1024)
 	 * physical eraseblocks maximum.
 	 */
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	/* get number of pages in erasesize
+	 * get actual page size
+	 * peb_size = n * a_psize
+        */
+	ubi->peb_count  = mtd_div_by_eb(ubi->mtd->size, ubi->mtd); /* the same */
+	ubi->ewritesize = (ubi->mtd->writesize / 5) * 4;
+	ubi->ewritesize = ubi->ewritesize - (ubi->ewritesize % 8);	/* align with 8 byte boundary */
+	ubi->ecc_start = ubi->ewritesize; /* right after data portion in the page */
+	ubi->_peb_size   = ubi->mtd->erasesize;
+	ubi->peb_size   = ubi->ewritesize * (ubi->mtd->erasesize / ubi->mtd->writesize);
+	ubi->flash_size = ubi->peb_count * ubi->peb_size;
+#else
 	ubi->peb_size   = ubi->mtd->erasesize;
 	ubi->peb_count  = mtd_div_by_eb(ubi->mtd->size, ubi->mtd);
 	ubi->flash_size = ubi->mtd->size;
+#endif
 
 	if (mtd_can_have_bb(ubi->mtd)) {
 		ubi->bad_allowed = 1;
@@ -615,6 +629,19 @@ static int io_init(struct ubi_device *ubi, int max_beb_per1024)
 		ubi->nor_flash = 1;
 	}
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ubi->min_io_size = ubi->ewritesize;
+	ubi->hdrs_min_io_size = ubi->min_io_size >> ubi->mtd->subpage_sft;
+	// ubi->hdrs_min_io_size = ubi->min_io_size; /* make it read-only mode */
+
+printk("ubi. min_io_size(%d), hdrs_min_io_size(%d), mtd->writesize(%d), mtd->subpage_sft(%d)\n", ubi->min_io_size, ubi->hdrs_min_io_size, ubi->mtd->writesize, ubi->mtd->subpage_sft);
+	if (!is_power_of_2(ubi->min_io_size)) {
+		ubi_warn(ubi, "min. I/O unit (%d) is not power of 2",
+			ubi->min_io_size);
+	}
+	ubi->_min_io_size = ubi->mtd->writesize;
+	ubi->_hdrs_min_io_size = ubi->mtd->writesize >> ubi->mtd->subpage_sft;
+#else
 	ubi->min_io_size = ubi->mtd->writesize;
 	ubi->hdrs_min_io_size = ubi->mtd->writesize >> ubi->mtd->subpage_sft;
 
@@ -628,11 +655,35 @@ static int io_init(struct ubi_device *ubi, int max_beb_per1024)
 			ubi->min_io_size);
 		return -EINVAL;
 	}
+#endif
 
 	ubi_assert(ubi->hdrs_min_io_size > 0);
 	ubi_assert(ubi->hdrs_min_io_size <= ubi->min_io_size);
 	ubi_assert(ubi->min_io_size % ubi->hdrs_min_io_size == 0);
-
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ubi->max_write_size = (ubi->mtd->writebufsize/5) * 4;
+	ubi->max_write_size = ubi->max_write_size - (ubi->max_write_size % 8);
+	/*
+	 * Maximum write size has to be greater or equivalent to min. I/O
+	 * size, and be multiple of min. I/O size.
+	 */
+	if (ubi->max_write_size < ubi->min_io_size ||
+	    ubi->max_write_size % ubi->min_io_size) {
+		ubi_err(ubi, "bad write buffer size %d for %d min. I/O unit",
+			ubi->max_write_size, ubi->min_io_size);
+		return -EINVAL;
+	}
+	/* Calculate default aligned sizes of EC and VID headers */
+	/*
+	ubi->ec_hdr_alsize = (UBI_EC_HDR_SIZE + ubi->hdrs_min_io_size) / ubi->hdrs_min_io_size;
+	ubi->ec_hdr_alsize *= ubi->hdrs_min_io_size;
+	ubi->vid_hdr_alsize = (UBI_VID_HDR_SIZE + ubi->hdrs_min_io_size) / ubi->hdrs_min_io_size;
+	ubi->vid_hdr_alsize *= ubi->hdrs_min_io_size; */
+	ubi->ec_hdr_alsize = CUSTOM_ALIGN(UBI_EC_HDR_SIZE, ubi->hdrs_min_io_size);
+	ubi->vid_hdr_alsize = CUSTOM_ALIGN(UBI_VID_HDR_SIZE, ubi->hdrs_min_io_size);
+	ubi->_ec_hdr_alsize = ALIGN(UBI_EC_HDR_SIZE, ubi->_hdrs_min_io_size);
+	ubi->_vid_hdr_alsize = ALIGN(UBI_VID_HDR_SIZE, ubi->_hdrs_min_io_size);
+#else
 	ubi->max_write_size = ubi->mtd->writebufsize;
 	/*
 	 * Maximum write size has to be greater or equivalent to min. I/O
@@ -645,16 +696,20 @@ static int io_init(struct ubi_device *ubi, int max_beb_per1024)
 			ubi->max_write_size, ubi->min_io_size);
 		return -EINVAL;
 	}
-
 	/* Calculate default aligned sizes of EC and VID headers */
 	ubi->ec_hdr_alsize = ALIGN(UBI_EC_HDR_SIZE, ubi->hdrs_min_io_size);
 	ubi->vid_hdr_alsize = ALIGN(UBI_VID_HDR_SIZE, ubi->hdrs_min_io_size);
+#endif
+
 
 	dbg_gen("min_io_size      %d", ubi->min_io_size);
 	dbg_gen("max_write_size   %d", ubi->max_write_size);
 	dbg_gen("hdrs_min_io_size %d", ubi->hdrs_min_io_size);
 	dbg_gen("ec_hdr_alsize    %d", ubi->ec_hdr_alsize);
 	dbg_gen("vid_hdr_alsize   %d", ubi->vid_hdr_alsize);
+
+	dbg_gen("before: vid_hdr_offset%d", ubi->vid_hdr_offset);
+
 
 	if (ubi->vid_hdr_offset == 0)
 		/* Default offset */
@@ -666,10 +721,31 @@ static int io_init(struct ubi_device *ubi, int max_beb_per1024)
 		ubi->vid_hdr_shift = ubi->vid_hdr_offset -
 						ubi->vid_hdr_aloffset;
 	}
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	if (ubi->_vid_hdr_offset == 0)
+		/* Default offset */
+		ubi->_vid_hdr_offset = ubi->_vid_hdr_aloffset =
+				      ubi->_ec_hdr_alsize;
+	else {
+		ubi->_vid_hdr_aloffset = ubi->_vid_hdr_offset &
+						~(ubi->_hdrs_min_io_size - 1);
+		ubi->_vid_hdr_shift = ubi->_vid_hdr_offset -
+						ubi->_vid_hdr_aloffset;
+	}
+	/* Similar for the data offset */
+	/* ubi->leb_start = ubi->vid_hdr_offset + UBI_VID_HDR_SIZE;
+	ubi->leb_start = (ubi->leb_start + ubi->min_io_size) / (ubi->min_io_size);
+	ubi->leb_start *= ubi->min_io_size; */
+	ubi->leb_start = ubi->vid_hdr_offset + UBI_VID_HDR_SIZE;
+	ubi->leb_start = CUSTOM_ALIGN(ubi->leb_start, ubi->min_io_size);
 
+	ubi->_leb_start = ubi->_vid_hdr_offset + UBI_VID_HDR_SIZE;
+	ubi->_leb_start = ALIGN(ubi->_leb_start, ubi->_min_io_size);
+#else
 	/* Similar for the data offset */
 	ubi->leb_start = ubi->vid_hdr_offset + UBI_VID_HDR_SIZE;
 	ubi->leb_start = ALIGN(ubi->leb_start, ubi->min_io_size);
+#endif
 
 	dbg_gen("vid_hdr_offset   %d", ubi->vid_hdr_offset);
 	dbg_gen("vid_hdr_aloffset %d", ubi->vid_hdr_aloffset);
@@ -683,6 +759,17 @@ static int io_init(struct ubi_device *ubi, int max_beb_per1024)
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	/* Check sanity */
+	if (ubi->vid_hdr_offset < UBI_EC_HDR_SIZE ||
+	    ubi->leb_start < ubi->vid_hdr_offset + UBI_VID_HDR_SIZE ||
+	    ubi->leb_start > ubi->peb_size - UBI_VID_HDR_SIZE ||
+	    ((ubi->leb_start % ubi->min_io_size) != 0)) {
+		ubi_err(ubi, "bad VID header (%d) or data offsets (%d): UBI_EC_HDR_SIZE(%d), UBI_VID_HDR_SIZE(%d), ubi->peb_size(%d)",
+			ubi->vid_hdr_offset, ubi->leb_start, UBI_EC_HDR_SIZE, UBI_VID_HDR_SIZE, ubi->peb_size);
+		return -EINVAL;
+	}
+#else
 	/* Check sanity */
 	if (ubi->vid_hdr_offset < UBI_EC_HDR_SIZE ||
 	    ubi->leb_start < ubi->vid_hdr_offset + UBI_VID_HDR_SIZE ||
@@ -692,7 +779,7 @@ static int io_init(struct ubi_device *ubi, int max_beb_per1024)
 			ubi->vid_hdr_offset, ubi->leb_start);
 		return -EINVAL;
 	}
-
+#endif
 	/*
 	 * Set maximum amount of physical erroneous eraseblocks to be 10%.
 	 * Erroneous PEB are those which have read errors.
@@ -810,6 +897,7 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num,
 	struct ubi_device *ubi;
 	int i, err;
 
+	dbg_io("start attaching mtd%d, ubi_num(%d), vid_hdr_offset(%d), max_beb_per1024(%d)", mtd->index, ubi_num, vid_hdr_offset, max_beb_per1024);
 	if (max_beb_per1024 < 0 || max_beb_per1024 > MAX_MTD_UBI_BEB_LIMIT)
 		return -EINVAL;
 
@@ -878,8 +966,12 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num,
 	ubi->mtd = mtd;
 	ubi->ubi_num = ubi_num;
 	ubi->vid_hdr_offset = vid_hdr_offset;
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ubi->_vid_hdr_offset = vid_hdr_offset;
+#endif
 	ubi->autoresize_vol_id = -1;
 
+	dbg_io("ubi->vid_hdr_offset = %d", vid_hdr_offset);
 #ifdef CONFIG_MTD_UBI_FASTMAP
 	ubi->fm_pool.used = ubi->fm_pool.size = 0;
 	ubi->fm_wl_pool.used = ubi->fm_wl_pool.size = 0;
@@ -925,9 +1017,16 @@ int ubi_attach_mtd_dev(struct mtd_info *mtd, int ubi_num,
 		goto out_free;
 
 	err = -ENOMEM;
+
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ubi->peb_buf = vmalloc(ubi->_peb_size);
+	if (!ubi->peb_buf)
+		goto out_free;
+#else
 	ubi->peb_buf = vmalloc(ubi->peb_size);
 	if (!ubi->peb_buf)
 		goto out_free;
+#endif
 
 #ifdef CONFIG_MTD_UBI_FASTMAP
 	ubi->fm_size = ubi_calc_fm_size(ubi);
@@ -1213,6 +1312,7 @@ static int __init ubi_init(void)
 			continue;
 		}
 
+	dbg_io("attach (%d)-th mtd device: ubi_num(%d), vid_hdr_offs(%d), max_beb_per1024(%d)", i, p->ubi_num, p->vid_hdr_offs, p->max_beb_per1024);
 		mutex_lock(&ubi_devices_mutex);
 		err = ubi_attach_mtd_dev(mtd, p->ubi_num,
 					 p->vid_hdr_offs, p->max_beb_per1024);

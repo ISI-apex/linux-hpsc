@@ -101,6 +101,151 @@ static int self_check_vid_hdr(const struct ubi_device *ubi, int pnum,
 static int self_check_write(struct ubi_device *ubi, const void *buf, int pnum,
 			    int offset, int len);
 
+
+static int gcount = 0;
+
+static void my_dbg_print16(uint8_t * buf) {
+	printk("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",  
+		buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8], buf[9], buf[10], buf[11], buf[12], buf[13], buf[14], buf[15]);
+}
+
+static void my_dbg_print(uint8_t * buf, size_t len) {
+	int i;
+	gcount++;
+	if (gcount > 10) return;
+	for (i = 0; i < (len/16 > 4 ? 4 : len/16 ) ; i++) {
+		my_dbg_print16(&buf[i*16]);
+	}
+}
+
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+static inline int ecc_convert_length(struct ubi_device *ubi, int len, int * npages) {
+	int t_len;
+
+	*npages = len / ubi->ewritesize;
+	t_len = * npages * ubi->mtd->writesize;
+	if (len % ubi->ewritesize)
+		t_len += ubi->mtd->writesize;
+	return t_len;
+}
+
+static inline loff_t ecc_convert_address(struct ubi_device *ubi, loff_t addr)
+{
+	int pnum = addr / ubi->peb_size;
+	int offset = addr % ubi->peb_size;
+	loff_t e_addr = (loff_t)pnum * ubi->_peb_size;
+	offset = (offset / ubi->ewritesize) * ubi->mtd->writesize + (offset % ubi->ewritesize);
+	return e_addr;
+}
+
+static inline loff_t ecc_convert_address_pnum(struct ubi_device *ubi, int pnum, int offset)
+{
+	loff_t addr;
+	addr = (loff_t)pnum * ubi->_peb_size;
+	addr += ((offset / ubi->ewritesize) * ubi->mtd->writesize) + (offset % ubi->ewritesize);
+	return addr;
+}
+
+int ecc_mtd_write(struct ubi_device *ubi, loff_t addr, int len, size_t * written, void * buf)
+{
+	int err;
+	int npages;
+	int e_len = ecc_convert_length(ubi, len, &npages);
+	loff_t e_addr = ecc_convert_address(ubi, addr);
+
+	/* generate ECC */
+	dbg_gen("%s: addr(0x%x), e_addr(0x%x), len(%d), e_len(%d)\n", __func__, addr, e_addr, len, e_len);
+	err = mtd_write(ubi->mtd, addr, e_len, written, buf);
+	ubi_assert(* written == e_len);
+	* written = len;
+	return err;
+}
+
+static int ecc_check(void * buf, size_t len) {
+	return 0;
+}
+
+int ubi_ecc_mtd_read(struct ubi_device *ubi, int pnum, int offset, int len, size_t *read, void * buf)
+{
+	int err;
+	int i, j, start_page_offset, end_page_offset, t_len, sub_len;
+	loff_t addr;
+	int start_page_no = offset / ubi->ewritesize;
+	int end_page_no = (offset + len) / ubi->ewritesize;
+	int start_offset_in_page = offset % ubi->ewritesize;
+	int npages = end_page_no - start_page_no + 1;
+	void * buf1;
+	int start_subpage_no = (offset - start_page_no * ubi->ewritesize) / ubi->hdrs_min_io_size;
+	int end_subpage_no = (offset - start_page_no * ubi->ewritesize + len) / ubi->hdrs_min_io_size;
+	int nsubpages = end_subpage_no - start_subpage_no + 1;
+	int start_subpage_in_page = start_offset_in_page / ubi->hdrs_min_io_size;
+	int start_offset_in_subpage = start_offset_in_page % ubi->hdrs_min_io_size;
+
+	if ((offset + len) % ubi->ewritesize != 0) end_page_no++;
+	if ((offset + len) % ubi->hdrs_min_io_size != 0) end_subpage_no++;
+
+	addr = (loff_t)pnum * ubi->_peb_size + (loff_t)start_page_no * ubi->mtd->writesize;
+	t_len = (end_page_no - start_page_no) * ubi->mtd->writesize;
+
+	if (offset== 1632 && len == 22848) {
+        printk("%s: pnum(%d), addr(0x%x), offset(%d), len(%d), buf(%p), npages(%d)\n", __func__, pnum, addr, offset, t_len, buf, npages);
+        printk("%s: start_page_no(%d), end_page_no(0x%x), start_offset_in_page(%d), start_subpage_no(%d), end_subpage_no(%p), start_subpage_in_page(%d), start_offset_in_subpage(%d), nsubpages(%d)\n", __func__, start_page_no, end_page_no, start_offset_in_page, start_subpage_no, end_subpage_no, start_subpage_in_page, start_offset_in_subpage, nsubpages);
+	}
+	buf1 = __vmalloc(t_len, GFP_NOFS, PAGE_KERNEL);
+	if (!buf1) {
+		return 0;
+	}
+	if (offset== 1632 && len == 22848) {
+        dbg_gen("%s: call mtd_read: addr(0x%x), len(%d), buf(%p)\n", __func__, addr, t_len, buf1);
+	}
+	err = mtd_read(ubi->mtd, addr, t_len, read, buf1);
+	if (err && !mtd_is_bitflip(err)) {
+		ubi_err(ubi, "err %d while reading %d bytes from PEB %d:%d, read %zd bytes",
+			err, t_len, pnum, offset, read);
+		return err;
+	}
+	ubi_assert(t_len == * read);
+	* read = len;
+
+	if (ecc_check(&buf1[0], t_len)) return -1;
+	t_len = len;
+	/* ECC check */
+
+	/* ECC check and extract data and make it continuous (if needed) in the buffer */	
+	if (!buf) buf = buf1;
+	if (len < ubi->hdrs_min_io_size - start_offset_in_subpage) sub_len = len;
+	else sub_len = ubi->hdrs_min_io_size - start_offset_in_subpage;
+	ubi_assert (sub_len >= 0);
+	if (offset== 1632 && len == 22848) {
+		printk("initial memcpy, index(%d), index1(%d), len(%d)\n", 
+			0, start_subpage_in_page*ubi->_hdrs_min_io_size+start_offset_in_subpage, sub_len);
+	}
+	memcpy(&buf[0], &buf1[start_subpage_in_page*ubi->_hdrs_min_io_size+start_offset_in_subpage], sub_len);
+	t_len -= sub_len;
+	if (t_len > 0) {
+		void * t_buf = &buf[sub_len];
+		for (i = 0, j = start_subpage_no+1 ; i < nsubpages-2; i++, j++, t_len -= ubi->hdrs_min_io_size) {
+			if (offset== 1632 && len == 22848) {
+				printk("%d-th memcpy of (%d), index(%d), index1(%d), len(%d)\n", 
+					i, nsubpages - 2, sub_len + i*ubi->hdrs_min_io_size, 
+					j*ubi->_hdrs_min_io_size, ubi->hdrs_min_io_size);
+			}
+			memcpy(&t_buf[i*ubi->hdrs_min_io_size], &buf1[j*ubi->_hdrs_min_io_size], ubi->hdrs_min_io_size);
+		}
+		ubi_assert (ubi->hdrs_min_io_size >= t_len);
+		if (t_len > 0) {
+			if (offset== 1632 && len == 22848) {
+				printk("last memcpy, index(%d), index1(%d), len(%d)\n", sub_len + i*ubi->hdrs_min_io_size, j*ubi->_hdrs_min_io_size, t_len);
+			}
+			memcpy(&t_buf[i*ubi->hdrs_min_io_size], &buf1[j*ubi->_hdrs_min_io_size], t_len);
+		}
+	}
+	if (buf != buf1) vfree(buf1);
+
+	return 0;
+}
+#endif
+
 /**
  * ubi_io_read - read data from a physical eraseblock.
  * @ubi: UBI device description object
@@ -164,7 +309,13 @@ int ubi_io_read(const struct ubi_device *ubi, void *buf, int pnum, int offset,
 
 	addr = (loff_t)pnum * ubi->peb_size + offset;
 retry:
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	err = ubi_ecc_mtd_read(ubi, pnum, offset, len, &read, buf);
+#else
 	err = mtd_read(ubi->mtd, addr, len, &read, buf);
+#endif
+my_dbg_print((uint8_t *)buf, len);
+
 	if (err) {
 		const char *errstr = mtd_is_eccerr(err) ? " (ECC error)" : "";
 
@@ -280,8 +431,13 @@ int ubi_io_write(struct ubi_device *ubi, const void *buf, int pnum, int offset,
 		return -EIO;
 	}
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	addr = (loff_t)pnum * ubi->peb_size + offset;
+	err = ecc_mtd_write(ubi, addr, len, &written, buf);
+#else
 	addr = (loff_t)pnum * ubi->peb_size + offset;
 	err = mtd_write(ubi->mtd, addr, len, &written, buf);
+#endif
 	if (err) {
 		ubi_err(ubi, "error %d while writing %d bytes to PEB %d:%d, written %zd bytes",
 			err, len, pnum, offset, written);
@@ -348,8 +504,13 @@ retry:
 	memset(&ei, 0, sizeof(struct erase_info));
 
 	ei.mtd      = ubi->mtd;
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ei.addr     = (loff_t)pnum * ubi->_peb_size;
+	ei.len      = ubi->_peb_size;
+#else
 	ei.addr     = (loff_t)pnum * ubi->peb_size;
 	ei.len      = ubi->peb_size;
+#endif
 	ei.callback = erase_callback;
 	ei.priv     = (unsigned long)&wq;
 
@@ -524,7 +685,11 @@ static int nor_erase_prepare(struct ubi_device *ubi, int pnum)
 	err = ubi_io_read_ec_hdr(ubi, pnum, &ec_hdr, 0);
 	if (err != UBI_IO_BAD_HDR_EBADMSG && err != UBI_IO_BAD_HDR &&
 	    err != UBI_IO_FF){
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+		err = ecc_mtd_write(ubi, addr, 4, &written, (void *)&data);
+#else
 		err = mtd_write(ubi->mtd, addr, 4, &written, (void *)&data);
+#endif
 		if(err)
 			goto error;
 	}
@@ -535,8 +700,13 @@ static int nor_erase_prepare(struct ubi_device *ubi, int pnum)
 	err = ubi_io_read_vid_hdr(ubi, pnum, &vidb, 0);
 	if (err != UBI_IO_BAD_HDR_EBADMSG && err != UBI_IO_BAD_HDR &&
 	    err != UBI_IO_FF){
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+		addr += ubi->vid_hdr_aloffset;
+		err = ecc_mtd_write(ubi, addr, 4, &written, (void *)&data);
+#else
 		addr += ubi->vid_hdr_aloffset;
 		err = mtd_write(ubi->mtd, addr, 4, &written, (void *)&data);
+#endif
 		if (err)
 			goto error;
 	}
@@ -620,7 +790,11 @@ int ubi_io_is_bad(const struct ubi_device *ubi, int pnum)
 	if (ubi->bad_allowed) {
 		int ret;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+		ret = mtd_block_isbad(mtd, (loff_t)pnum * ubi->_peb_size);
+#else
 		ret = mtd_block_isbad(mtd, (loff_t)pnum * ubi->peb_size);
+#endif
 		if (ret < 0)
 			ubi_err(ubi, "error %d while checking if PEB %d is bad",
 				ret, pnum);
@@ -655,7 +829,11 @@ int ubi_io_mark_bad(const struct ubi_device *ubi, int pnum)
 	if (!ubi->bad_allowed)
 		return 0;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	err = mtd_block_markbad(mtd, (loff_t)pnum * ubi->_peb_size);
+#else
 	err = mtd_block_markbad(mtd, (loff_t)pnum * ubi->peb_size);
+#endif
 	if (err)
 		ubi_err(ubi, "cannot mark PEB %d bad, error %d", pnum, err);
 	return err;
@@ -685,6 +863,19 @@ static int validate_ec_hdr(const struct ubi_device *ubi,
 		goto bad;
 	}
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	if (vid_hdr_offset != ubi->_vid_hdr_offset) {
+		ubi_err(ubi, "bad VID header offset %d, expected %d",
+			vid_hdr_offset, ubi->_vid_hdr_offset);
+		goto bad;
+	}
+
+	if (leb_start != ubi->_leb_start) {
+		ubi_err(ubi, "bad data offset %d, expected %d",
+			leb_start, ubi->_leb_start);
+		goto bad;
+	}
+#else
 	if (vid_hdr_offset != ubi->vid_hdr_offset) {
 		ubi_err(ubi, "bad VID header offset %d, expected %d",
 			vid_hdr_offset, ubi->vid_hdr_offset);
@@ -696,6 +887,7 @@ static int validate_ec_hdr(const struct ubi_device *ubi,
 			leb_start, ubi->leb_start);
 		goto bad;
 	}
+#endif
 
 	if (ec < 0 || ec > UBI_MAX_ERASECOUNTER) {
 		ubi_err(ubi, "bad erase counter %lld", ec);
@@ -853,7 +1045,11 @@ int ubi_io_write_ec_hdr(struct ubi_device *ubi, int pnum,
 
 	ec_hdr->magic = cpu_to_be32(UBI_EC_HDR_MAGIC);
 	ec_hdr->version = UBI_VERSION;
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ec_hdr->vid_hdr_offset = cpu_to_be32(ubi->_vid_hdr_offset);
+#else
 	ec_hdr->vid_hdr_offset = cpu_to_be32(ubi->vid_hdr_offset);
+#endif
 	ec_hdr->data_offset = cpu_to_be32(ubi->leb_start);
 	ec_hdr->image_seq = cpu_to_be32(ubi->image_seq);
 	crc = crc32(UBI_CRC32_INIT, ec_hdr, UBI_EC_HDR_SIZE_CRC);
@@ -1206,7 +1402,11 @@ static int self_check_peb_ec_hdr(const struct ubi_device *ubi, int pnum)
 	if (!ubi_dbg_chk_io(ubi))
 		return 0;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ec_hdr = kzalloc(ubi->_ec_hdr_alsize, GFP_NOFS);
+#else
 	ec_hdr = kzalloc(ubi->ec_hdr_alsize, GFP_NOFS);
+#endif
 	if (!ec_hdr)
 		return -ENOMEM;
 
@@ -1346,6 +1546,14 @@ static int self_check_write(struct ubi_device *ubi, const void *buf, int pnum,
 	if (!ubi_dbg_chk_io(ubi))
 		return 0;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	buf1 = NULL;
+	err = ubi_ecc_mtd_read(ubi, pnum, offset, len, &read, buf1);
+	if (!buf1) {
+		ubi_err(ubi, "cannot allocate memory to check writes");
+		return 0;
+	}
+#else
 	buf1 = __vmalloc(len, GFP_NOFS, PAGE_KERNEL);
 	if (!buf1) {
 		ubi_err(ubi, "cannot allocate memory to check writes");
@@ -1353,6 +1561,8 @@ static int self_check_write(struct ubi_device *ubi, const void *buf, int pnum,
 	}
 
 	err = mtd_read(ubi->mtd, addr, len, &read, buf1);
+#endif
+my_dbg_print((uint8_t *)buf1, len);
 	if (err && !mtd_is_bitflip(err))
 		goto out_free;
 
@@ -1410,13 +1620,22 @@ int ubi_self_check_all_ff(struct ubi_device *ubi, int pnum, int offset, int len)
 	if (!ubi_dbg_chk_io(ubi))
 		return 0;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	buf = NULL;
+	err = ubi_ecc_mtd_read(ubi, pnum, offset, len, &read, buf);
+	if (!buf) {
+		ubi_err(ubi, "cannot allocate memory to check for 0xFFs");
+		return 0;
+	}
+#else
 	buf = __vmalloc(len, GFP_NOFS, PAGE_KERNEL);
 	if (!buf) {
 		ubi_err(ubi, "cannot allocate memory to check for 0xFFs");
 		return 0;
 	}
-
 	err = mtd_read(ubi->mtd, addr, len, &read, buf);
+#endif
+my_dbg_print((uint8_t *)buf, len);
 	if (err && !mtd_is_bitflip(err)) {
 		ubi_err(ubi, "err %d while reading %d bytes from PEB %d:%d, read %zd bytes",
 			err, len, pnum, offset, read);

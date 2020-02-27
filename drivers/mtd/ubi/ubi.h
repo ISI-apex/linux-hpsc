@@ -647,7 +647,19 @@ struct ubi_device {
 	unsigned int nor_flash:1;
 	int max_write_size;
 	struct mtd_info *mtd;
-
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	int _leb_start;
+	int _hdrs_min_io_size;
+	int _ec_hdr_alsize;
+	int _vid_hdr_alsize;
+	int _vid_hdr_offset;	/* original */
+	int _vid_hdr_aloffset;
+	int _vid_hdr_shift;
+	int _min_io_size;	/* physical minimum io size */
+	int _peb_size;		/* physical writeblock (page) size */
+	int ewritesize;		/* effective writeblock (page) size */
+	int ecc_start;		/* Offset of ECC region the the page */
+#endif
 	void *peb_buf;
 	struct mutex buf_mutex;
 	struct mutex ckvol_mutex;
@@ -1220,4 +1232,10 @@ static inline struct ubi_wl_entry *ubi_find_fm_block(const struct ubi_device *ub
 	return NULL;
 }
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+int ubi_ecc_mtd_read(struct ubi_device *ubi, int pnum, int offset, int len, size_t *read,
+	     void *buf);
+
+#define CUSTOM_ALIGN(x, a) ((((x) + (a)) / (int) (a)) * (a))
+#endif
 #endif /* !__UBI_UBI_H__ */

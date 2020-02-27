@@ -1873,7 +1873,7 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 	page = realpage & chip->pagemask;
 
 	col = (int)(from & (mtd->writesize - 1));
-
+//printk("%s: from(0x%lx), chip->chip_shift(0x%x), chip->page_shift(0x%x),  realpage = 0x%x, page = 0x%x, col = 0x%x\n", __func__, realpage, page, col);
 	buf = ops->datbuf;
 	oob = ops->oobbuf;
 	oob_required = oob ? 1 : 0;
@@ -2012,6 +2012,9 @@ read_retry:
 			chip->select_chip(mtd, chipnr);
 		}
 	}
+
+//printk("%s: Is this the right place to read ECC pages and do error correction?\n");
+
 	chip->select_chip(mtd, -1);
 
 	ops->retlen = ops->len - (size_t) readlen;
@@ -2704,7 +2707,7 @@ static int nand_do_write_ops(struct mtd_info *mtd, loff_t to,
 
 	realpage = (int)(to >> chip->page_shift);
 	page = realpage & chip->pagemask;
-
+printk("%s: realpage(0x%x), page(0x%x)\n", __func__, realpage, page);
 	/* Invalidate the page cache, when we write to the cached page */
 	if (to <= ((loff_t)chip->pagebuf << chip->page_shift) &&
 	    ((loff_t)chip->pagebuf << chip->page_shift) < (to + ops->len))
@@ -2733,6 +2736,7 @@ static int nand_do_write_ops(struct mtd_info *mtd, loff_t to,
 
 		/* Partial page write?, or need to use bounce buffer */
 		if (use_bufpoi) {
+printk("%s: using write bounce buffer for buf@%p\n", __func__, buf);
 			pr_debug("%s: using write bounce buffer for buf@%p\n",
 					 __func__, buf);
 			if (part_pagewr)
@@ -2744,14 +2748,16 @@ static int nand_do_write_ops(struct mtd_info *mtd, loff_t to,
 		}
 
 		if (unlikely(oob)) {
+printk("%s: unlikely(oob)\n", __func__);
 			size_t len = min(oobwritelen, oobmaxlen);
 			oob = nand_fill_oob(mtd, oob, len, ops);
 			oobwritelen -= len;
 		} else {
 			/* We still need to erase leftover OOB data */
+printk("%s: call memset \n", __func__);
 			memset(chip->oob_poi, 0xff, mtd->oobsize);
 		}
-
+printk("%s: call nand_write_page(column(0x%x), bytes(0x%x), page(0x%x)\n", __func__, column, bytes, page);
 		ret = nand_write_page(mtd, chip, column, bytes, wbuf,
 				      oob_required, page,
 				      (ops->mode == MTD_OPS_RAW));
@@ -2859,7 +2865,7 @@ static int nand_do_write_oob(struct mtd_info *mtd, loff_t to,
 {
 	int chipnr, page, status, len;
 	struct nand_chip *chip = mtd_to_nand(mtd);
-
+printk("%s: to (0x%x)\n", __func__, to);
 	pr_debug("%s: to = 0x%08x, len = %i\n",
 			 __func__, (unsigned int)to, (int)ops->ooblen);
 

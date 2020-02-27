@@ -213,7 +213,11 @@ static ssize_t vol_cdev_read(struct file *file, __user char *buf, size_t count,
 
 	tbuf_size = vol->usable_leb_size;
 	if (count < tbuf_size)
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+		tbuf_size = CUSTOM_ALIGN(count, ubi->min_io_size);
+#else
 		tbuf_size = ALIGN(count, ubi->min_io_size);
+#endif
 	tbuf = vmalloc(tbuf_size);
 	if (!tbuf)
 		return -ENOMEM;
@@ -294,7 +298,11 @@ static ssize_t vol_cdev_direct_write(struct file *file, const char __user *buf,
 
 	tbuf_size = vol->usable_leb_size;
 	if (count < tbuf_size)
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+		tbuf_size = CUSTOM_ALIGN(count, ubi->min_io_size);
+#else
 		tbuf_size = ALIGN(count, ubi->min_io_size);
+#endif
 	tbuf = vmalloc(tbuf_size);
 	if (!tbuf)
 		return -ENOMEM;

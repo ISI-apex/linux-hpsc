@@ -28,6 +28,15 @@
 
 static int jffs2_flash_setup(struct jffs2_sb_info *c);
 
+#ifdef DK
+static void dk_print_ri(struct jffs2_raw_inode * ri, char * func) {
+printk("DK: %s: ri.data_crc(0x%x), ri.node_crc(0x%x), ri.uid(0x%x), ri.gid(0x%x), ri.isize(0x%x), ri.atime(0x%x), ri.ctime(0x%x), ri.mtime(0x%x), ri.offset(0x%x), ri.csize(0x%x), ri.dsize(0x%x) \n", func, 
+	ri->data_crc, ri->node_crc, ri->uid, ri->gid, ri->isize, ri->atime, ri->ctime, ri->mtime, ri->offset, ri->csize, ri->dsize);
+}
+#else
+static void dk_print_ri(struct jffs2_raw_inode * ri, char * func) {}
+#endif
+
 int jffs2_do_setattr (struct inode *inode, struct iattr *iattr)
 {
 	struct jffs2_full_dnode *old_metadata, *new_metadata;
@@ -134,6 +143,7 @@ int jffs2_do_setattr (struct inode *inode, struct iattr *iattr)
 		ri->data_crc = cpu_to_je32(crc32(0, mdata, mdatalen));
 	else
 		ri->data_crc = cpu_to_je32(0);
+dk_print_ri(ri, __func__);
 
 	new_metadata = jffs2_write_dnode(c, f, ri, mdata, mdatalen, alloc_type);
 	if (S_ISLNK(inode->i_mode))

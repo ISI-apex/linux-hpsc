@@ -19,6 +19,31 @@
 #include "nodelist.h"
 #include "compr.h"
 
+#ifdef DK
+static void dk_print_ri(struct jffs2_raw_inode * ri, jint32_t crc, char * func) {
+if (crc.v32 == 0x5aec18ca) {
+printk("DK: %s: ri.data_crc(0x%x), ri.node_crc(0x%x), ri.uid(0x%x), ri.gid(0x%x), ri.isize(0x%x), ri.atime(0x%x), ri.ctime(0x%x), ri.mtime(0x%x), ri.offset(0x%x), ri.csize(0x%x), ri.dsize(0x%x) \n", func, 
+	ri->data_crc, ri->node_crc, ri->uid, ri->gid, ri->isize, ri->atime, ri->ctime, ri->mtime, ri->offset, ri->csize, ri->dsize);
+}
+}
+
+static void dk_print_data(unsigned char * buf, uint32_t len, jint32_t crc, char * func) {
+int i;
+if (crc.v32 == 0x5aec18ca) {
+   printk("%s: len = (0x%x), crc = (0x%x)\n", func, len, crc); 
+
+   for (i = 0; i < len ; i = i+16) {
+       printk("\t0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+           buf[i], buf[i+1], buf[i+2], buf[i+3], buf[i+4], buf[i+5], buf[i+6], buf[i+7], 
+           buf[i+8], buf[i+9], buf[i+10], buf[i+11], buf[i+12], buf[i+13], buf[i+14], buf[i+15]);
+   }
+
+}
+}
+#else
+static void dk_print_ri(struct jffs2_raw_inode * ri, jint32_t crc, char * func) {;}
+static void dk_print_data(unsigned char * buf, uint32_t len, jint32_t crc, char * func) {;}
+#endif
 
 int jffs2_do_new_inode(struct jffs2_sb_info *c, struct jffs2_inode_info *f,
 		       uint32_t mode, struct jffs2_raw_inode *ri)
@@ -387,6 +412,8 @@ int jffs2_write_inode_range(struct jffs2_sb_info *c, struct jffs2_inode_info *f,
 		ri->usercompr = (comprtype >> 8 ) & 0xff;
 		ri->node_crc = cpu_to_je32(crc32(0, ri, sizeof(*ri)-8));
 		ri->data_crc = cpu_to_je32(crc32(0, comprbuf, cdatalen));
+dk_print_ri(ri, ri->data_crc, __func__);
+dk_print_data(comprbuf, cdatalen, ri->data_crc, __func__);
 
 		fn = jffs2_write_dnode(c, f, ri, comprbuf, cdatalen, ALLOC_NORETRY);
 
@@ -461,6 +488,7 @@ int jffs2_do_create(struct jffs2_sb_info *c, struct jffs2_inode_info *dir_f,
 
 	ri->data_crc = cpu_to_je32(0);
 	ri->node_crc = cpu_to_je32(crc32(0, ri, sizeof(*ri)-8));
+dk_print_ri(ri, ri->data_crc, __func__);
 
 	fn = jffs2_write_dnode(c, f, ri, NULL, 0, ALLOC_NORMAL);
 

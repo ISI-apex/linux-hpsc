@@ -64,6 +64,7 @@
 /* Inline function for the NAND controller register write */
 static inline void pl35x_nand_write32(void __iomem *addr, u32 val)
 {
+//printk("%s: (val: 0x%x), addr(0x%llx)\n", __func__, val, virt_to_phys(addr));
 	writel_relaxed((val), (addr));
 }
 
@@ -432,7 +433,7 @@ static int pl35x_nand_write_oob(struct mtd_info *mtd, struct nand_chip *chip,
 	struct pl35x_nand_info *xnand =
 		container_of(chip, struct pl35x_nand_info, chip);
 	unsigned long nand_offset = (unsigned long __force)xnand->nand_base;
-
+//printk("%s: cmdfunc: NAND_CMD_SEQIN(%d), page(0x%x)\n", __func__, NAND_CMD_SEQIN, page);
 	chip->cmdfunc(mtd, NAND_CMD_SEQIN, mtd->writesize, page);
 
 	chip->write_buf(mtd, buf,
@@ -667,6 +668,7 @@ static int pl35x_nand_read_page_hwecc(struct mtd_info *mtd,
 		container_of(chip, struct pl35x_nand_info, chip);
 	unsigned long nand_offset = (unsigned long __force)xnand->nand_base;
 
+//printk("%s: Read blocks: chip->IO_ADDR_R(0x%x)\n", __func__, chip->IO_ADDR_R);
 	for ( ; (eccsteps - 1); eccsteps--) {
 		chip->read_buf(mtd, p, eccsize);
 		p += eccsize;
@@ -676,9 +678,12 @@ static int pl35x_nand_read_page_hwecc(struct mtd_info *mtd,
 
 	/* Set ECC Last bit to 1 */
 	data_phase_addr = (unsigned long __force)chip->IO_ADDR_R;
+//printk("%s: Set ECC Last bit to 1 \n", __func__);
+//printk("%s: before: data_phase_addr = 0x%lx, nand_offset = 0x%lx, chip->IO_ADDR_R(0x%x)\n", __func__, data_phase_addr, nand_offset, chip->IO_ADDR_R);
 	data_phase_addr -= nand_offset;
 	data_phase_addr |= PL35X_NAND_ECC_LAST;
 	data_phase_addr += nand_offset;
+//printk("%s: after: data_phase_addr = 0x%lx, nand_offset = 0x%lx, chip->IO_ADDR_R(0x%x)\n", __func__, data_phase_addr, nand_offset, chip->IO_ADDR_R);
 	chip->IO_ADDR_R = (void __iomem * __force)data_phase_addr;
 	chip->read_buf(mtd, p, PL35X_NAND_LAST_TRANSFER_LENGTH);
 
@@ -687,13 +692,16 @@ static int pl35x_nand_read_page_hwecc(struct mtd_info *mtd,
 	chip->ecc.calculate(mtd, p, &ecc_calc[0]);
 
 	/* Clear ECC last bit */
+//printk("%s: Set ECC Last bit to 1 \n", __func__);
 	data_phase_addr = (unsigned long __force)chip->IO_ADDR_R;
 	data_phase_addr -= nand_offset;
 	data_phase_addr &= ~PL35X_NAND_ECC_LAST;
 	data_phase_addr += nand_offset;
 	chip->IO_ADDR_R = (void __iomem * __force)data_phase_addr;
+//printk("%s: after: data_phase_addr = 0x%lx, chip->IO_ADDR_R(0x%x)\n", __func__, data_phase_addr, chip->IO_ADDR_R);
 
 	/* Read the stored ECC value */
+//printk("%s: Read the stored ECC value\n", __func__);
 	oob_ptr = chip->oob_poi;
 	chip->read_buf(mtd, oob_ptr,
 			(mtd->oobsize - PL35X_NAND_LAST_TRANSFER_LENGTH));
@@ -804,7 +812,8 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 	unsigned long cmd_phase_addr, data_phase_addr, end_cmd, i;
 	unsigned long timeout = jiffies + PL35X_NAND_DEV_BUSY_TIMEOUT;
 	u32 addrcycles;
-
+//if (command == NAND_CMD_SEQIN || command == NAND_CMD_PAGEPROG)
+//    printk("%s: command(0x%x), column(0x%x), page_addr(0x%x)\n", __func__, command, column, page_addr);
 	if (xnand->end_cmd_pending) {
 		/*
 		 * Check for end command if this command request is same as the
@@ -923,7 +932,8 @@ static void pl35x_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 				column >>= 1;
 		cmd_data = column;
 	}
-
+//if (command == NAND_CMD_SEQIN || command == NAND_CMD_PAGEPROG)
+//   printk("%s: write: cmd_addr(0x%x), cmd = 0x%x\n", __func__, cmd_addr, cmd_data);
 	pl35x_nand_write32(cmd_addr, cmd_data);
 
 	if (curr_cmd->end_cmd_valid) {

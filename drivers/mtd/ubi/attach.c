@@ -797,7 +797,11 @@ static int early_erase_peb(struct ubi_device *ubi,
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
 	ec_hdr = kzalloc(ubi->ec_hdr_alsize, GFP_KERNEL);
+#else
+	ec_hdr = kzalloc(ubi->_ec_hdr_alsize, GFP_KERNEL);
+#endif
 	if (!ec_hdr)
 		return -ENOMEM;
 
@@ -1393,7 +1397,11 @@ static int scan_all(struct ubi_device *ubi, struct ubi_attach_info *ai,
 
 	err = -ENOMEM;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ai->ech = kzalloc(ubi->_ec_hdr_alsize, GFP_KERNEL);
+#else
 	ai->ech = kzalloc(ubi->ec_hdr_alsize, GFP_KERNEL);
+#endif
 	if (!ai->ech)
 		return err;
 
@@ -1507,7 +1515,11 @@ static int scan_fast(struct ubi_device *ubi, struct ubi_attach_info **ai)
 	if (!scan_ai)
 		goto out;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	scan_ai->ech = kzalloc(ubi->_ec_hdr_alsize, GFP_KERNEL);
+#else
 	scan_ai->ech = kzalloc(ubi->ec_hdr_alsize, GFP_KERNEL);
+#endif
 	if (!scan_ai->ech)
 		goto out_ai;
 

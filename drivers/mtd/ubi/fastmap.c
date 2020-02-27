@@ -417,7 +417,11 @@ static int scan_pool(struct ubi_device *ubi, struct ubi_attach_info *ai,
 	struct ubi_ainf_peb *new_aeb;
 	int i, pnum, err, ret = 0;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ech = kzalloc(ubi->_ec_hdr_alsize, GFP_KERNEL);
+#else
 	ech = kzalloc(ubi->ec_hdr_alsize, GFP_KERNEL);
+#endif
 	if (!ech)
 		return -ENOMEM;
 
@@ -938,7 +942,11 @@ int ubi_scan_fastmap(struct ubi_device *ubi, struct ubi_attach_info *ai,
 		goto free_fm_sb;
 	}
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ech = kzalloc(ubi->_ec_hdr_alsize, GFP_KERNEL);
+#else
 	ech = kzalloc(ubi->ec_hdr_alsize, GFP_KERNEL);
+#endif
 	if (!ech) {
 		ret = -ENOMEM;
 		goto free_fm_sb;
@@ -1381,7 +1389,11 @@ static int erase_block(struct ubi_device *ubi, int pnum)
 	struct ubi_ec_hdr *ec_hdr;
 	long long ec;
 
+#ifdef CONFIG_HPSC_CUSTOM_ECC
+	ec_hdr = kzalloc(ubi->_ec_hdr_alsize, GFP_KERNEL);
+#else
 	ec_hdr = kzalloc(ubi->ec_hdr_alsize, GFP_KERNEL);
+#endif
 	if (!ec_hdr)
 		return -ENOMEM;
 
