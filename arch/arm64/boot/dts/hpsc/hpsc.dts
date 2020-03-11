@@ -586,7 +586,9 @@
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__HPPS_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__HPPS_DMA_EV0   GIC_LVL_HI>;
+#ifndef USE_PHYS_ADDR
 			iommus = <&smmu MASTER_ID_HPPS_DMA>;
+#endif
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
@@ -598,7 +600,9 @@
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__SRIO0_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__SRIO0_DMA_EV0   GIC_LVL_HI>;
+#ifndef USE_PHYS_ADDR
 			iommus = <&smmu MASTER_ID_SRIO0_DMA>;
+#endif
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};
@@ -610,7 +614,9 @@
 			interrupt-parent = <&gic>;
 			interrupts = <GIC_SPI HPPS_IRQ__SRIO1_DMA_ABORT GIC_LVL_HI>,
 				     <GIC_SPI HPPS_IRQ__SRIO1_DMA_EV0 GIC_LVL_HI>;
+#ifndef USE_PHYS_ADDR
 			iommus = <&smmu MASTER_ID_SRIO1_DMA>;
+#endif
 			clocks = <&dma_clk>;
 			clock-names = "apb_pclk"; /* required, because amba code looks for it by name */
 		};

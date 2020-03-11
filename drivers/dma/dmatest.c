@@ -8,6 +8,13 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+
+#ifdef USE_PHYS_ADDR
+// both addresses are within ramoops reserved memory
+#define SRC_PHYS_ADDR 0xC3200000
+#define DST_PHYS_ADDR 0xC3201000
+#endif
+
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/delay.h>
@@ -360,14 +367,14 @@ static void dmatest_callback(void *arg)
 	done->done = true;
 	wake_up_all(done->wait);
 }
-
+#ifndef USE_PHYS_ADDR
 static unsigned int min_odd(unsigned int x, unsigned int y)
 {
 	unsigned int val = min(x, y);
 
 	return val % 2 ? val : val - 1;
 }
-
+#endif
 static void result(const char *err, unsigned int n, unsigned int src_off,
 		   unsigned int dst_off, unsigned int len, unsigned long data)
 {
@@ -454,6 +461,10 @@ static int dmatest_func(void *data)
 	unsigned long long	total_len = 0;
 	u8			align = 0;
 	bool			is_memset = false;
+#ifdef USE_PHYS_ADDR
+	unsigned long src_phys_addr, dst_phys_addr;
+	u8 *src_virt_addr, *dst_virt_addr;
+#endif
 
 	set_freezable();
 
@@ -464,6 +475,11 @@ static int dmatest_func(void *data)
 	params = &info->params;
 	chan = thread->chan;
 	dev = chan->device;
+#ifdef USE_PHYS_ADDR
+	// only allow DMA_MEMCPY
+	align = dev->copy_align;
+	src_cnt = dst_cnt = 1;
+#else
 	if (thread->type == DMA_MEMCPY) {
 		align = dev->copy_align;
 		src_cnt = dst_cnt = 1;
@@ -493,6 +509,7 @@ static int dmatest_func(void *data)
 			pq_coefs[i] = 1;
 	} else
 		goto err_thread_type;
+#endif
 
 	thread->srcs = kcalloc(src_cnt + 1, sizeof(u8 *), GFP_KERNEL);
 	if (!thread->srcs)
@@ -503,10 +520,16 @@ static int dmatest_func(void *data)
 		goto err_usrcs;
 
 	for (i = 0; i < src_cnt; i++) {
+#ifdef USE_PHYS_ADDR
+	        src_phys_addr = SRC_PHYS_ADDR;
+	        src_virt_addr = ioremap(src_phys_addr, params->buf_size + align);
+		thread->usrcs[i] = src_virt_addr;
+#else
 		thread->usrcs[i] = kmalloc(params->buf_size + align,
 					   GFP_KERNEL);
 		if (!thread->usrcs[i])
 			goto err_srcbuf;
+#endif
 
 		/* align srcs to alignment restriction */
 		if (align)
@@ -525,10 +548,16 @@ static int dmatest_func(void *data)
 		goto err_udsts;
 
 	for (i = 0; i < dst_cnt; i++) {
+#ifdef USE_PHYS_ADDR
+	        dst_phys_addr = DST_PHYS_ADDR;
+	        dst_virt_addr = ioremap(dst_phys_addr, params->buf_size + align);
+		thread->udsts[i] = dst_virt_addr;
+#else
 		thread->udsts[i] = kmalloc(params->buf_size + align,
 					   GFP_KERNEL);
 		if (!thread->udsts[i])
 			goto err_dstbuf;
+#endif
 
 		/* align dsts to alignment restriction */
 		if (align)
@@ -615,6 +644,9 @@ static int dmatest_func(void *data)
 
 		um->len = params->buf_size;
 		for (i = 0; i < src_cnt; i++) {
+#ifdef USE_PHYS_ADDR
+			srcs[i] = phys_to_dma(dev->dev, SRC_PHYS_ADDR + src_off);
+#else
 			void *buf = thread->srcs[i];
 			struct page *pg = virt_to_page(buf);
 			unsigned long pg_off = offset_in_page(buf);
@@ -622,6 +654,7 @@ static int dmatest_func(void *data)
 			um->addr[i] = dma_map_page(dev->dev, pg, pg_off,
 						   um->len, DMA_TO_DEVICE);
 			srcs[i] = um->addr[i] + src_off;
+#endif
 			ret = dma_mapping_error(dev->dev, um->addr[i]);
 			if (ret) {
 				dmaengine_unmap_put(um);
@@ -635,12 +668,17 @@ static int dmatest_func(void *data)
 		/* map with DMA_BIDIRECTIONAL to force writeback/invalidate */
 		dsts = &um->addr[src_cnt];
 		for (i = 0; i < dst_cnt; i++) {
+#ifdef USE_PHYS_ADDR
+			dsts[i] = phys_to_dma(dev->dev, DST_PHYS_ADDR);
+#else
 			void *buf = thread->dsts[i];
 			struct page *pg = virt_to_page(buf);
 			unsigned long pg_off = offset_in_page(buf);
 
 			dsts[i] = dma_map_page(dev->dev, pg, pg_off, um->len,
 					       DMA_BIDIRECTIONAL);
+#endif
+
 			ret = dma_mapping_error(dev->dev, dsts[i]);
 			if (ret) {
 				dmaengine_unmap_put(um);
@@ -660,7 +698,12 @@ static int dmatest_func(void *data)
 			sg_dma_len(&tx_sg[i]) = len;
 			sg_dma_len(&rx_sg[i]) = len;
 		}
-
+#ifdef USE_PHYS_ADDR
+		// only allow DMA_MEMCPY
+		tx = dev->device_prep_dma_memcpy(chan,
+						 dsts[0] + dst_off,
+						 srcs[0], len, flags);
+#else
 		if (thread->type == DMA_MEMCPY)
 			tx = dev->device_prep_dma_memcpy(chan,
 							 dsts[0] + dst_off,
@@ -687,6 +730,7 @@ static int dmatest_func(void *data)
 						     src_cnt, pq_coefs,
 						     len, flags);
 		}
+#endif
 
 		if (!tx) {
 			dmaengine_unmap_put(um);
@@ -783,6 +827,11 @@ static int dmatest_func(void *data)
 			verbose_result("test passed", total_tests, src_off,
 				       dst_off, len, 0);
 		}
+
+#ifdef USE_PHYS_ADDR
+		iounmap((void *)src_phys_addr);
+		iounmap((void *)dst_phys_addr);
+#endif
 	}
 	ktime = ktime_sub(ktime_get(), ktime);
 	ktime = ktime_sub(ktime, comparetime);
@@ -790,22 +839,29 @@ static int dmatest_func(void *data)
 	runtime = ktime_to_us(ktime);
 
 	ret = 0;
+
+#ifndef USE_PHYS_ADDR
 err_dstbuf:
 	for (i = 0; thread->udsts[i]; i++)
 		kfree(thread->udsts[i]);
 	kfree(thread->udsts);
+#endif
 err_udsts:
 	kfree(thread->dsts);
 err_dsts:
+#ifndef USE_PHYS_ADDR
 err_srcbuf:
 	for (i = 0; thread->usrcs[i]; i++)
 		kfree(thread->usrcs[i]);
 	kfree(thread->usrcs);
+#endif
 err_usrcs:
 	kfree(thread->srcs);
 err_srcs:
 	kfree(pq_coefs);
+#ifndef USE_PHYS_ADDR
 err_thread_type:
+#endif
 	pr_info("%s: summary %u tests, %u failures %llu iops %llu KB/s (%d)\n",
 		current->comm, total_tests, failed_tests,
 		dmatest_persec(runtime, total_tests),
@@ -851,6 +907,10 @@ static int dmatest_add_threads(struct dmatest_info *info,
 	char *op;
 	unsigned int i;
 
+#ifdef USE_PHYS_ADDR
+	// only support DMA_MEMCPY
+	op = "copy";
+#else
 	if (type == DMA_MEMCPY)
 		op = "copy";
 	else if (type == DMA_MEMSET)
@@ -863,6 +923,7 @@ static int dmatest_add_threads(struct dmatest_info *info,
 		op = "pq";
 	else
 		return -EINVAL;
+#endif
 
 	for (i = 0; i < params->threads_per_chan; i++) {
 		thread = kzalloc(sizeof(struct dmatest_thread), GFP_KERNEL);
@@ -966,7 +1027,11 @@ static void request_channels(struct dmatest_info *info,
 	dma_cap_mask_t mask;
 
 	dma_cap_zero(mask);
+#ifdef USE_PHYS_ADDR
+	dma_cap_set(DMA_MEMCPY, mask);
+#else
 	dma_cap_set(type, mask);
+#endif
 	for (;;) {
 		struct dmatest_params *params = &info->params;
 		struct dma_chan *chan;
