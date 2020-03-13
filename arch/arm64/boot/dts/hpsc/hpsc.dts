@@ -6,6 +6,51 @@
 
 #include "mailbox-map.h" /* same file also present in other subsystems */
 
+/* Default all options to enabled (designed to be overriden on command line
+ * when manually building dtb with a preprocessor). */
+
+#ifndef CONFIG_DMA
+#define CONFIG_DMA 1
+#endif
+#ifndef CONFIG_ETH
+#define CONFIG_ETH 1
+#endif
+#ifndef CONFIG_ETH_CDNS
+#define CONFIG_ETH_CDNS 1
+#endif
+#ifndef CONFIG_MAILBOXES
+#define CONFIG_MAILBOXES 1
+#endif
+#ifndef CONFIG_PMU
+#define CONFIG_PMU 1
+#endif
+#ifndef CONFIG_RTI_TIMERS
+#define CONFIG_RTI_TIMERS 1
+#endif
+#ifndef CONFIG_SMC
+#define CONFIG_SMC 1
+#endif
+/* Enable manually depending on which memory chips are hooked up on the board
+ * 	CONFIG_SMC_SRAM__{NOR,NVRAM}
+ * 	CONFIG_SMC_NAND
+ */
+#ifndef CONFIG_SMMU
+#define CONFIG_SMMU 1
+#endif
+#ifndef CONFIG_WDTS
+#define CONFIG_WDTS 1
+#endif
+
+#ifndef CONFIG_SHMEM
+#define CONFIG_SHMEM 1
+#endif
+#ifndef CONFIG_HPSC_MSG_TP_MBOX
+#define CONFIG_HPSC_MSG_TP_MBOX 1
+#endif
+#ifndef CONFIG_HPSC_MSG_TP_SHMEM
+#define CONFIG_HPSC_MSG_TP_SHMEM 1
+#endif
+
 #define GIC_SPI 0
 #define GIC_PPI 1
 #define GIC_EDGE_RISE 1
