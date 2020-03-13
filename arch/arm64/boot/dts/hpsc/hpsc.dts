@@ -641,27 +641,24 @@
 #elif CONFIG_SMC_SRAM__NOR
 			sram@600000000 {
 				compatible = "cfi-flash";
-				reg = <0x6 0x00000000 0x0 0x20000000>;
+				reg = <0x6 0x00000000 0x0 0x2000000>;
 				status = "okay";
 
-				bank-width = <4>;
+				bank-width = <1>;
 
-				/* TODO: some of these params may not be
-				   relevant to the chip; kernel should be fixed
-				   to look only for relevant ones. */
 				arm,sram-chip-nmbr = <1>;
-				arm,sram-mw = <0x2>; /* 32-bit width */
-				arm,sram-wr-sync = <1>;
-				arm,sram-rd-sync = <1>;
+				arm,sram-mw = <0x1>; /* 16-bit width */
+				arm,sram-wr-sync = <0>;
+				arm,sram-rd-sync = <0>;
 				arm,sram-cre= <1>;
-				arm,sram-adv = <1>;
-				arm,sram-ext-addr-bits= <0xb>;
-				arm,sram-cycle-t0 = <1>;
-				arm,sram-cycle-t1 = <1>;
+				arm,sram-adv = <0>;
+				arm,sram-ext-addr-bits= <0x0>;
+				arm,sram-cycle-t0 = <11>;
+				arm,sram-cycle-t1 = <6>;
 				arm,sram-cycle-t2 = <1>;
-				arm,sram-cycle-t3 = <1>;
+				arm,sram-cycle-t3 = <4>;
 				arm,sram-cycle-t4 = <1>;
-				arm,sram-cycle-t5 = <1>;
+				arm,sram-cycle-t5 = <3>;
 				arm,sram-cycle-t6 = <0>;
 			};
 #endif /* CONFIG_SMC_SRAM__* */
