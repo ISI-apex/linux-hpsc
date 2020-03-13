@@ -491,7 +491,7 @@ static void pl35x_smc_init_sram_interface(struct platform_device *pdev,
 	for (i = 0; i < chip_nmbr ; i++) {
 		cmd = (cre << PL35X_SMC_DC_CMD_set_cre_SHIFT) |
 			 (i << PL35X_SMC_DC_CMD_chip_nmbr_SHIFT) |
-			 (PL35X_SMC_CMD_TYPE_ModeRegUpdateRegs <<
+			 (PL35X_SMC_CMD_TYPE_UpdateRegs <<
 				PL35X_SMC_DC_CMD_cmd_type_SHIFT) |
 			 (ext_addr_bits << PL35X_SMC_DC_CMD_addr_SHIFT);
 
