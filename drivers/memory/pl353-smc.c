@@ -470,7 +470,7 @@ static void pl353_smc_init_sram_interface(struct platform_device *pdev,
 	for (i = 0; i < chip_nmbr ; i++) {
 		cmd = (cre << PL353_SMC_DC_CMD_set_cre_SHIFT) |
 			(i << PL353_SMC_DC_CMD_chip_nmbr_SHIFT) |
-			(PL353_SMC_CMD_TYPE_ModeRegUpdateRegs << PL353_SMC_DC_CMD_cmd_type_SHIFT) |
+			(PL353_SMC_CMD_TYPE_UpdateRegs << PL353_SMC_DC_CMD_cmd_type_SHIFT) |
 			(ext_addr_bits << PL353_SMC_DC_CMD_addr_SHIFT);
 		writel(cmd, pl353_smc_base + PL353_SMC_DIRECT_CMD_OFFS);
 		pr_debug("%s: writes 0x%x @ 0x%x(offset)\n", __func__, cmd,
