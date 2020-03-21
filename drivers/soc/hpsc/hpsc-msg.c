@@ -24,7 +24,7 @@ int hpsc_msg_wdt_timeout(unsigned int cpu)
 }
 EXPORT_SYMBOL_GPL(hpsc_msg_wdt_timeout);
 
-#define LIFECYCLE_INFO_SIZE FIELD_SIZEOF(struct hpsc_msg_lifeycle_payload, info)
+#define LIFECYCLE_INFO_SIZE sizeof_field(struct hpsc_msg_lifeycle_payload, info)
 int hpsc_msg_lifecycle(enum hpsc_msg_lifecycle_status status, const char *fmt, ...)
 {
 	// payload is the status enumeration and a string of debug data
